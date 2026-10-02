@@ -41,7 +41,8 @@ export class AssetEngine {
   private flips: RecentEvent[] = [];
   private divs: RecentEvent[] = [];
   private snapCache: { ts: number; snap: ReturnType<VolumeProfile['snapshot']> } | null = null;
-  private lastPrice = 0;
+  lastPrice = 0;
+  lastTs = 0;
   private evalDue = false;
   /** While true: state is updated but no alerts / new signals are produced (warm-up, backfill). */
   silent = false;
@@ -81,6 +82,7 @@ export class AssetEngine {
     const { cfg, deps } = this;
     this.stats.trades++;
     this.lastPrice = t.price;
+    this.lastTs = t.ts;
     this.profile.add(t.ts, t.price, t.size);
     this.tracker.onPrice(this.symbol, t.ts, t.price);
 

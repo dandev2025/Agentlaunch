@@ -72,6 +72,14 @@ export class LiveCollector {
     this.pipeline.flush();
   }
 
+  get connected(): boolean {
+    return this.stream.connected;
+  }
+
+  get lastFrameAt(): number {
+    return this.stream.lastFrameAt;
+  }
+
   get reconnects(): number {
     return this.stream.reconnects;
   }

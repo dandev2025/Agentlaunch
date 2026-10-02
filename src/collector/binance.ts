@@ -62,6 +62,12 @@ export class BinanceStream {
   private retry: NodeJS.Timeout | null = null;
   private stopped = true;
   reconnects = 0;
+  connected = false;
+
+  /** Epoch ms of the last frame/pong received (0 if none yet). */
+  get lastFrameAt(): number {
+    return this.lastMsgAt;
+  }
 
   constructor(private o: StreamOptions) {}
 
@@ -77,6 +83,7 @@ export class BinanceStream {
     this.timer = this.retry = null;
     this.ws?.terminate();
     this.ws = null;
+    this.connected = false;
   }
 
   private connect(): void {
@@ -88,6 +95,7 @@ export class BinanceStream {
     const die = (why: string) => {
       if (dead || this.ws !== ws) return;
       dead = true;
+      this.connected = false;
       if (this.timer) clearInterval(this.timer);
       this.timer = null;
       try { ws.terminate(); } catch { /* already closed */ }
@@ -98,6 +106,7 @@ export class BinanceStream {
 
     ws.on('open', () => {
       this.attempt = 0;
+      this.connected = true;
       this.lastMsgAt = Date.now();
       this.o.onStatus?.('open');
       this.timer = setInterval(() => {

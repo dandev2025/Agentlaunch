@@ -16,11 +16,16 @@ The only runtime dependency is `ws`. No paid API keys are used or needed.
 ```bash
 npm install
 cp .env.example .env        # optional: add TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
-npm test                    # 48 tests
+npm test                    # 52 tests
 npm run typecheck
 ```
 
 Without Telegram credentials, alerts print to the console instead.
+
+**Telegram commands** (while `npm run collect` is running; only your `TELEGRAM_CHAT_ID` is answered, read-only):
+`/status` shows uptime, WebSocket state and last-frame age, reconnects, gaps, per-asset price/trades/big trades/open signals,
+24h alert and signal counts, and the last signal. `/help` lists commands. The bot uses long-polling, so don't run a webhook
+or a second process polling the same bot (Telegram returns 409).
 
 ## Run
 
