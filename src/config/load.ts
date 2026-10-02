@@ -56,6 +56,12 @@ export function validateConfig(cfg: Config): void {
     if (s.minFamilies < 1) errs.push('signals.minFamilies must be >= 1');
     for (const tf of [s.deltaFlip.timeframe, s.htf.timeframe, s.risk.atrTimeframe])
       if (!cfg.timeframes.includes(tf)) errs.push(`timeframe ${tf} used by signals must be listed in timeframes`);
+    const cf = s.confluence;
+    if (cf?.enabled) {
+      if (cf.stackFactor < 0 || cf.stackFactor > 1) errs.push('signals.confluence.stackFactor must be in [0,1]');
+      if (cf.conflict.weight < 0) errs.push('signals.confluence.conflict.weight must be >= 0');
+      for (const [k, v] of Object.entries(cf.familyBonus)) if (!Number.isInteger(Number(k)) || !(v > 0)) errs.push(`signals.confluence.familyBonus.${k} must map an integer family count to a positive multiplier`);
+    }
     if (s.tracking.t1Fraction < 0 || s.tracking.t1Fraction > 1) errs.push('signals.tracking.t1Fraction must be in [0,1]');
   }
   for (const tf of cfg.alerts?.deltaDivergence?.timeframes ?? [])

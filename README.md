@@ -5,8 +5,8 @@ scored LONG/SHORT signals to Telegram**. **There is no order execution anywhere 
 Every alert and signal is logged to SQLite together with the inputs that triggered it, and every
 signal's outcome (stop / T1 / T2, max move for and against) is tracked automatically.
 
-Status: **Phase 1, 1B, Footprint, Heat map and GEX built.** The confluence engine and the Next.js dashboard are
-later phases.
+Status: **Phase 1, 1B, Footprint, Heat map, GEX and the confluence engine built.** The Next.js dashboard is the
+remaining phase.
 
 ## Setup
 
@@ -16,7 +16,7 @@ The only runtime dependency is `ws`. No paid API keys are used or needed.
 ```bash
 npm install
 cp .env.example .env        # optional: add TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
-npm test                    # 107 tests
+npm test                    # 123 tests
 npm run typecheck
 ```
 
@@ -108,6 +108,30 @@ Plan: entry zone around the level (± `entryZoneAtr`×ATR, widened to include cu
 level ∓ `stopAtrMult`×ATR, T1/T2 = next two profile levels (POC/VAH/VAL/HVN) in the trade direction at least
 `minTargetAtr`×ATR away (if only one exists, T2 is ATR-projected and flagged as such).
 
+### Confluence (`src/signals/confluence.ts`)
+Conditions are not simply added up. Per signal:
+1. **Family collapse** — within one indicator family the strongest condition counts fully and the others at `stackFactor` (0.5),
+   so `delta_flip` + `divergence` (both from the same delta feed) don't count twice.
+2. **Diversity bonus** — × `familyBonus` for how many independent families agree (3 → 1.1, 4 → 1.2, 5 → 1.3; 2 → 1.0).
+3. **Conflict penalty** — opposing-direction evidence *at the current price* subtracts `conflict.weight` (0.5) × its family-collapsed
+   score. It is gathered without needing a profile level (bearish footprint absorption near price counts against a long even with no
+   resistance level there). Only `delta`, `bigtrades`, `footprint`, `heatmap` count as opposing: a level can be support *and*
+   resistance (POC), and GEX is a one-sided regime, so `profile` and `gex` are excluded by default (`conflict.families`).
+
+`score = (sum of family scores) × bonus − conflict`, and that is what `threshold` is compared to. The full breakdown (raw sum, family
+scores, multiplier, conflict and the opposing conditions) is stored in each signal's `inputs.confluence` and shown in the Telegram
+message. `signals.confluence.enabled = false` restores the old flat sum exactly. **All the multipliers are untuned guesses** — the
+tools below exist so you can test them instead of trusting them:
+- `npm run report` also breaks results down **per family**, **per score bucket** (does a higher score actually do better?) and **by family count**.
+- A/B a scoring change on the same stored trades:
+  ```bash
+  npm run replay -- --run on  --no-report
+  npm run replay -- --run off --no-report --config config/no-confluence.json   # a copy of config.json with confluence.enabled=false
+  npm run compare -- --a off --b on
+  ```
+  `compare` matches signals by symbol/direction/time and shows those in both, only in A, only in B, with their outcomes. Cooldowns make
+  the "only in" buckets partly an artefact (a signal one run takes can block a different one in the other), and it warns when buckets are small.
+
 **Outcome tracking** is trade-by-trade, so stop-vs-target ordering is exact. Realised R: stop before T1 = −1R;
 `t1Fraction` (50%) is banked at T1 and the rest runs to T2 or the original stop; unresolved signals expire
 after `maxHoldMs` and are marked to market. Assumption: entry at the signal price (no slippage/fees modelled).
@@ -192,7 +216,7 @@ src/indicators            candles, atr, bigTrades, volumeProfile, divergence
 src/alerts                cooldown, rules, telegram/console notifiers
 src/signals               evaluate (pure scoring+plan), tracker, format
 src/engine                AssetEngine, Pipeline        src/backtest   replay, report, synthetic data
-src/cli                   collect, replay, report, backfill, seed-synthetic, footprint, heatmap, gex     tests/  node:test
+src/cli                   collect, replay, report, backfill, seed-synthetic, footprint, heatmap, gex, compare     tests/  node:test
 ```
 
 ## Caveats
