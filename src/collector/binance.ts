@@ -18,12 +18,12 @@ export const defaultWsFactory: WsFactory = (url) => new WebSocket(url) as unknow
 export function streamUrl(
   base: string,
   symbols: string[],
-  depth: { enabled: boolean; levels: number; speedMs: number },
+  depth: { enabled: boolean; speedMs: number },
 ): string {
   const streams = symbols.flatMap((s) => {
     const l = s.toLowerCase();
     const out = [`${l}@aggTrade`];
-    if (depth.enabled) out.push(`${l}@depth${depth.levels}@${depth.speedMs}ms`);
+    if (depth.enabled) out.push(`${l}@depth@${depth.speedMs}ms`); // diff stream; the book is rebuilt locally
     return out;
   });
   return `${base.replace(/\/$/, '')}/stream?streams=${streams.join('/')}`;

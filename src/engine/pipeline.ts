@@ -1,5 +1,5 @@
 import type { Config } from '../config/types.js';
-import type { Trade } from '../core/types.js';
+import type { Trade, WallEvent } from '../core/types.js';
 import { AssetEngine, type EngineDeps } from './assetEngine.js';
 
 export class Pipeline {
@@ -25,6 +25,10 @@ export class Pipeline {
     } finally {
       e.silent = prev;
     }
+  }
+
+  onWallEvent(e: WallEvent): void {
+    this.engines.get(e.symbol)?.onWallEvent(e);
   }
 
   flush(): void {

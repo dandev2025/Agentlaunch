@@ -2,6 +2,7 @@ import type { Store } from '../db/store.js';
 import { LIVE_RUN } from '../db/store.js';
 import type { LiveCollector } from './live.js';
 import type { Pipeline } from '../engine/pipeline.js';
+import type { WallSource } from '../core/types.js';
 import { fmtPrice, fmtTime } from '../core/format.js';
 
 export interface StatusData {
@@ -9,7 +10,7 @@ export interface StatusData {
   startedAt: number;
   ws: { connected: boolean; lastFrameAt: number; reconnects: number };
   gaps: { found: number; recovered: number };
-  symbols: { symbol: string; price: number; lastTs: number; trades: number; bigTrades: number; openSignals: number }[];
+  symbols: { symbol: string; price: number; lastTs: number; trades: number; bigTrades: number; openSignals: number; walls: number | null }[];
   last24h: { alerts: number; signals: number; open: number };
   lastSignal: { id: number; ts: number; symbol: string; direction: string; score: number } | null;
 }
@@ -23,7 +24,7 @@ const dur = (ms: number): string => {
   return h < 48 ? `${h}h ${m % 60}m` : `${Math.floor(h / 24)}d ${h % 24}h`;
 };
 
-export function gatherStatus(c: LiveCollector, p: Pipeline, store: Store, startedAt: number, now = Date.now()): StatusData {
+export function gatherStatus(c: LiveCollector, p: Pipeline, store: Store, startedAt: number, now = Date.now(), walls?: WallSource): StatusData {
   const one = (sql: string, ...a: any[]) => store.db.prepare(sql).get(...a) as any;
   const since = now - 86_400_000;
   const open = store.loadOpenSignals();
@@ -35,6 +36,7 @@ export function gatherStatus(c: LiveCollector, p: Pipeline, store: Store, starte
     symbols: [...p.engines.values()].map((e) => ({
       symbol: e.symbol, price: e.lastPrice, lastTs: e.lastTs, trades: e.stats.trades, bigTrades: e.stats.bigTrades,
       openSignals: open.filter((s) => s.symbol === e.symbol).length,
+      walls: walls ? walls.activeWalls(e.symbol, now).length : null,
     })),
     last24h: {
       alerts: one('SELECT COUNT(*) c FROM alerts WHERE run_id = ? AND ts >= ?', LIVE_RUN, since).c,
@@ -58,7 +60,7 @@ export function formatStatus(d: StatusData): string {
     ...d.symbols.map(
       (s) =>
         `<b>${s.symbol}</b> ${s.trades ? fmtPrice(s.price) : '–'} · ${s.trades.toLocaleString('en-US')} trades` +
-        `${s.trades ? ` · last ${dur(d.now - s.lastTs)} ago` : ''} · ${s.bigTrades} big · ${s.openSignals} open sig`,
+        `${s.trades ? ` · last ${dur(d.now - s.lastTs)} ago` : ''} · ${s.bigTrades} big · ${s.openSignals} open sig${s.walls == null ? '' : ` · ${s.walls} walls`}`,
     ),
     '',
     `Last 24h: ${d.last24h.alerts} alerts, ${d.last24h.signals} signals (${d.last24h.open} open now)`,

@@ -113,4 +113,19 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_footprint_events ON footprint_events (run_id, symbol, ts);
   `,
+  // 4 — Heat map phase: wall lifecycle detail. Walls and their size timeline are market observations
+  // (like trades/candles), not per-run output, so replay can rebuild wall state from them.
+  `
+  ALTER TABLE book_walls ADD COLUMN executed REAL NOT NULL DEFAULT 0;
+  ALTER TABLE book_walls ADD COLUMN detail TEXT;
+  CREATE INDEX idx_book_walls ON book_walls (symbol, first_seen);
+  CREATE TABLE book_wall_events (
+    id INTEGER PRIMARY KEY,
+    wall_id INTEGER NOT NULL REFERENCES book_walls(id),
+    ts INTEGER NOT NULL,
+    type TEXT NOT NULL,                 -- added | changed | pulled | eaten | expired
+    size REAL NOT NULL
+  );
+  CREATE INDEX idx_book_wall_events ON book_wall_events (wall_id, ts);
+  `,
 ];

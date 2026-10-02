@@ -1,10 +1,12 @@
-import type { LevelKind, Timeframe } from '../core/types.js';
+import type { LevelKind, Timeframe, WallEventType } from '../core/types.js';
 import type { FootprintOptions } from '../indicators/footprint.js';
 
 export interface AssetConfig {
   enabled: boolean;
   /** Volume-profile price bin (quote currency). */
   binSize: number;
+  /** Minimum resting size (base units) for a book level to count as a wall. */
+  wallMinQty: number;
   /** Footprint price bin (finer than the profile bin). */
   footprintBin: number;
   /** A trade is "big" if size >= minQty OR notional >= minNotionalUsd (whichever is set). */
@@ -18,7 +20,8 @@ export interface Config {
   collector: {
     wsBaseUrl: string;
     restBaseUrl: string;
-    depth: { enabled: boolean; levels: number; speedMs: number };
+    /** Diff depth stream + REST snapshot of `snapshotLimit` levels, for the heat map. */
+    depth: { enabled: boolean; snapshotLimit: number; speedMs: number };
     pingIntervalMs: number;
     staleAfterMs: number;
     reconnectMinDelayMs: number;
@@ -45,9 +48,33 @@ export interface Config {
     /** Footprint conditions only count when the event zone is at/near the level the signal is built on. */
     requireAtLevel: boolean;
   };
+  heatmap: {
+    enabled: boolean;
+    trackIntervalMs: number;
+    /** Book range tracked around mid, as a fraction of price (0.01 = ±1%). */
+    rangePct: number;
+    snapshot: { persist: boolean; intervalMs: number; retentionHours: number };
+    wall: {
+      /** A level is a wall if size >= max(wallMinQty, relMult x median level size in range). */
+      relMult: number;
+      /** A wall ends when its size falls below dropFrac x its peak. */
+      dropFrac: number;
+      /** Ended wall counts as "eaten" (vs "pulled") if traded volume at it >= eatenFrac x peak, or price swept through. */
+      eatenFrac: number;
+      /** Record a size-change event when size moves by this fraction. */
+      changeFrac: number;
+      /** For signals: wall must be at least this old (filters flash/spoof orders)... */
+      minAgeMs: number;
+      /** ...and still hold >= holdFrac x its peak size. */
+      holdFrac: number;
+    };
+    /** Wall condition only counts when the wall sits at/near the profile level the signal is built on. */
+    requireAtLevel: boolean;
+  };
   alerts: {
     maxAgeMs: number;
     bigTradeAtLevel: { enabled: boolean; levels: LevelKind[]; cooldownMs: number };
+    wall: { enabled: boolean; events: WallEventType[]; levels: LevelKind[]; cooldownMs: number };
     deltaDivergence: {
       enabled: boolean;
       timeframes: Timeframe[];

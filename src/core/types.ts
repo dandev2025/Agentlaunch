@@ -109,3 +109,31 @@ export interface FootprintEvent {
   hi: number;
   detail: Record<string, unknown>;
 }
+
+// ---- heat map -------------------------------------------------------------------
+export type WallSide = 'bid' | 'ask';
+export type WallEventType = 'added' | 'changed' | 'pulled' | 'eaten' | 'expired';
+
+/** A large resting order-book level (aggregated to the asset's price bin). */
+export interface WallView {
+  id: number;
+  side: WallSide;
+  price: number;
+  size: number; // current resting size (base units)
+  peak: number;
+  firstSeen: number;
+  executed: number; // aggressive volume traded into it while it lived
+}
+
+export interface WallEvent {
+  type: WallEventType;
+  symbol: string;
+  ts: number;
+  wall: WallView;
+  detail: { lifetimeMs: number; spoofLike: boolean; [k: string]: unknown };
+}
+
+/** Where the engine asks "which walls are standing at time ts?" — live tracker or replay timeline. */
+export interface WallSource {
+  activeWalls(symbol: string, ts: number): WallView[];
+}

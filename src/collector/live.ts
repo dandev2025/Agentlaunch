@@ -4,10 +4,13 @@ import type { Store } from '../db/store.js';
 import type { Pipeline } from '../engine/pipeline.js';
 import { BinanceStream, parseAggTrade, streamUrl, type WsFactory } from './binance.js';
 import { fetchAggTradesRange, GapDetector, type FetchJson } from './gaps.js';
+import type { HeatmapService } from './heatmap.js';
 
 export interface LiveOptions {
   wsFactory?: WsFactory;
   fetchJson?: FetchJson;
+  /** Heat-map service that consumes depth messages and live trades (optional). */
+  heat?: HeatmapService;
   log?: (msg: string) => void;
   now?: () => number;
 }
@@ -40,7 +43,11 @@ export class LiveCollector {
       reconnectMinDelayMs: c.reconnectMinDelayMs,
       reconnectMaxDelayMs: c.reconnectMaxDelayMs,
       wsFactory: o.wsFactory,
-      onStatus: (s, info) => this.log(`ws ${s}${info ? `: ${info}` : ''}`),
+      onStatus: (s, info) => {
+        this.log(`ws ${s}${info ? `: ${info}` : ''}`);
+        // Depth events are lost while disconnected, so any open book can no longer be trusted.
+        if (s === 'closed' || s === 'stale') this.o.heat?.onStreamReconnect();
+      },
       onMessage: (m) => this.onMessage(m),
     });
   }
@@ -102,7 +109,9 @@ export class LiveCollector {
 
   private onMessage(m: { stream: string; data: any }): void {
     if (m.stream.includes('@depth')) {
-      this.depthMessages++; // Heat-map phase will consume these; Phase 1 only counts them.
+      this.depthMessages++;
+      const d = m.data;
+      if (d?.e === 'depthUpdate' && typeof d.s === 'string') this.o.heat?.onDepth(d.s, { U: d.U, u: d.u, pu: d.pu, b: d.b ?? [], a: d.a ?? [] });
       return;
     }
     const t = parseAggTrade(m.data);
@@ -132,6 +141,7 @@ export class LiveCollector {
       for (const r of recovered) this.pipeline.onTrade(r, true);
     }
     this.buffer.push(t);
+    this.o.heat?.onTrade(t);
     this.pipeline.onTrade(t);
   }
 }

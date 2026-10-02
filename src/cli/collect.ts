@@ -2,6 +2,7 @@ import { loadConfig } from '../config/load.js';
 import { Store } from '../db/store.js';
 import { notifierFromEnv } from '../alerts/notifier.js';
 import { LiveCollector } from '../collector/live.js';
+import { HeatmapService } from '../collector/heatmap.js';
 import { Pipeline } from '../engine/pipeline.js';
 import { TelegramCommandListener } from '../alerts/telegramBot.js';
 import { formatStatus, gatherStatus, HELP_TEXT } from '../collector/status.js';
@@ -9,18 +10,21 @@ import { formatStatus, gatherStatus, HELP_TEXT } from '../collector/status.js';
 const cfg = loadConfig();
 const store = new Store(cfg.dbPath);
 const notifier = notifierFromEnv();
-const pipeline = new Pipeline(cfg, { store, notifier, persistCandles: true, log: (m) => console.log(`[signal] ${m}`) });
-const collector = new LiveCollector(cfg, store, pipeline);
+const heat = cfg.heatmap.enabled ? new HeatmapService(cfg, store) : undefined;
+const pipeline = new Pipeline(cfg, { store, notifier, persistCandles: true, walls: heat, log: (m) => console.log(`[signal] ${m}`) });
+if (heat) heat.onWallEvent = (e) => pipeline.onWallEvent(e);
+const collector = new LiveCollector(cfg, store, pipeline, { heat });
 
 console.log(`Collecting ${pipeline.symbols.join(', ')} → ${cfg.dbPath}  (alerts and signals only — no order execution)`);
 const startedAt = Date.now();
 collector.warmup();
 collector.start();
+heat?.start();
 
 const { TELEGRAM_BOT_TOKEN: token, TELEGRAM_CHAT_ID: chatId } = process.env;
 const bot = token && chatId
   ? new TelegramCommandListener(token, chatId, {
-      status: () => formatStatus(gatherStatus(collector, pipeline, store, startedAt)),
+      status: () => formatStatus(gatherStatus(collector, pipeline, store, startedAt, undefined, heat)),
       help: () => HELP_TEXT,
       start: () => HELP_TEXT,
     }, (text) => notifier.send(text))
@@ -35,6 +39,7 @@ const status = setInterval(() => {
 const shutdown = async () => {
   clearInterval(status);
   bot?.stop();
+  heat?.stop();
   await collector.stop();
   store.close();
   process.exit(0);
