@@ -1,5 +1,6 @@
 import type { LevelKind, Timeframe, WallEventType } from '../core/types.js';
 import type { FootprintOptions } from '../indicators/footprint.js';
+import type { ConfluenceConfig } from '../signals/confluence.js';
 
 export interface AssetConfig {
   enabled: boolean;
@@ -107,6 +108,8 @@ export interface Config {
     cooldownMs: number;
     conditionTtlMs: number;
     weights: Record<string, number>;
+    /** How conditions combine: family collapse, diversity bonus, conflict penalty. */
+    confluence: ConfluenceConfig;
     deltaFlip: { timeframe: Timeframe; minMultOfAvg: number; avgLookback: number };
     bigPrints: { windowMs: number; minCount: number };
     htf: {

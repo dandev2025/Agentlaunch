@@ -5,7 +5,8 @@ import { toBigTrade } from '../src/indicators/bigTrades.js';
 import type { ProfileSnapshot } from '../src/core/types.js';
 import { testConfig, trade } from './helpers.js';
 
-const sc = testConfig().signals;
+// These tests assert which conditions fire and exact point sums, so they pin the legacy flat scoring; confluence has its own tests.
+const sc = testConfig((c) => { c.signals.confluence.enabled = false; }).signals;
 // Levels: VAL 100, POC 110, VAH 120, HVN 105 & 130
 const profile: ProfileSnapshot = {
   ts: 0, poc: 110, val: 100, vah: 120, totalVolume: 1e4, binSize: 1,
@@ -122,4 +123,17 @@ test('fallback T2 is ATR-projected when only one target exists', () => {
 test('weights are configurable', () => {
   const r = evaluateDirection({ ...sc, weights: { ...sc.weights, 'level:VAL': 5 } , threshold: 90 }, base(), 'LONG');
   assert.ok(!r.ok && r.reason === 'below_threshold' && r.score === 75);
+});
+
+test('coincident levels of different kinds are one target: T2 never equals T1', () => {
+  // VAH and an HVN both sit at 105; POC is at 110
+  const p: ProfileSnapshot = { ...profile, vah: 105, hvns: [{ price: 105, volume: 1 }, { price: 130, volume: 1 }] };
+  const r = evaluateDirection({ ...sc, risk: { ...sc.risk, minRR: 0.1 } }, base({ profile: p }), 'LONG');
+  assert.ok(r.ok);
+  assert.equal(r.candidate.t1, 105);
+  assert.equal(r.candidate.t2, 110); // the next *distinct* level
+  // with nothing else beyond, T2 falls back to the ATR projection rather than duplicating T1
+  const only: ProfileSnapshot = { ...profile, poc: 100.2, vah: 105, hvns: [{ price: 105, volume: 1 }] };
+  const r2 = evaluateDirection({ ...sc, risk: { ...sc.risk, minRR: 0.1 } }, base({ profile: only }), 'LONG');
+  assert.ok(r2.ok && r2.candidate.t2Synthetic && r2.candidate.t2 > r2.candidate.t1);
 });

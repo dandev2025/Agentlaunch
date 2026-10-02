@@ -5,9 +5,15 @@ import { esc } from '../alerts/notifier.js';
 export function signalMessage(c: Candidate, id: number): string {
   const icon = c.direction === 'LONG' ? '🟢' : '🔴';
   const conds = c.conditions.map((k) => `• ${k.key} (+${k.points})`).join('\n');
+  const cf = c.confluence;
+  const fams = Object.entries(cf.familyScores).map(([f, v]) => `${f} ${v.toFixed(0)}`).join(' · ');
+  const confLine = cf.enabled
+    ? `Confluence: ${cf.familyCount} families (${fams}) ×${cf.multiplier}${cf.conflict ? ` · conflict −${cf.conflict} (${cf.conflictConditions.map((k) => k.key).join(', ')})` : ''}\n`
+    : '';
   return (
     `${icon} <b>${c.direction} ${esc(c.symbol)}</b> · score ${c.score} · #${id}\n` +
     `${conds}\n` +
+    confLine +
     `Entry zone ${fmtPrice(c.entryLo)} – ${fmtPrice(c.entryHi)} (now ${fmtPrice(c.entry)})\n` +
     `Stop ${fmtPrice(c.stop)} (ATR ${fmtPrice(c.atr)})\n` +
     `T1 ${fmtPrice(c.t1)} · T2 ${fmtPrice(c.t2)}${c.t2Synthetic ? ' (ATR-projected)' : ''}\n` +

@@ -105,7 +105,8 @@ test('collector routes depth frames to the heat map and a disconnect desyncs the
 });
 
 // ---- signal condition ---------------------------------------------------------
-const sc = testConfig().signals;
+// These tests assert which conditions fire and exact point sums, so they pin the legacy flat scoring; confluence has its own tests.
+const sc = testConfig((c) => { c.signals.confluence.enabled = false; }).signals;
 const heatCfg = { requireAtLevel: true, minAgeMs: 30_000, holdFrac: 0.7 };
 const profile: ProfileSnapshot = { ts: 0, poc: 110, val: 100, vah: 120, totalVolume: 1e4, binSize: 1, hvns: [{ price: 105, volume: 1 }] };
 const T = 1_000_000;

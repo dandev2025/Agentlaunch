@@ -12,6 +12,7 @@
     "footprint": "tsx src/cli/footprint.ts",
     "heatmap": "tsx src/cli/heatmap.ts",
     "gex": "tsx src/cli/gex.ts",
+    "compare": "tsx src/cli/compare.ts",
     "backfill": "tsx src/cli/backfill.ts",
     "seed-synthetic": "tsx src/cli/seed-synthetic.ts",
     "typecheck": "tsc --noEmit",

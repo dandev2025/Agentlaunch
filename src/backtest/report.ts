@@ -28,17 +28,25 @@ export interface Report {
   byDirection: Record<string, Stats>;
   bySymbol: Record<string, Stats>;
   byCondition: ConditionStats[];
+  /** Same with/without view, per indicator family. */
+  byFamily: ConditionStats[];
+  /** Does a higher score actually do better? Buckets of 10 points, ascending. */
+  byScoreBucket: ({ bucket: string } & Stats)[];
+  byFamilyCount: Record<string, Stats>;
 }
 
-interface Row {
+export interface Row {
   id: number;
+  ts: number;
   symbol: string;
   direction: string;
+  score: number;
   outcome: string;
   r: number;
   mfeR: number;
   maeR: number;
   keys: Set<string>;
+  families: Set<string>;
 }
 
 export function computeStats(rows: Pick<Row, 'outcome' | 'r' | 'mfeR' | 'maeR'>[]): Stats {
@@ -61,28 +69,48 @@ export function computeStats(rows: Pick<Row, 'outcome' | 'r' | 'mfeR' | 'maeR'>[
   };
 }
 
-export function buildReport(store: Store, runId: string, filter: { symbol?: string } = {}): Report {
+/** Closed signals of a run with their conditions, families and outcomes. */
+export function loadClosedRows(store: Store, runId: string, filter: { symbol?: string } = {}): { rows: Row[]; total: number } {
   const where = `run_id = ? ${filter.symbol ? 'AND symbol = ?' : ''}`;
   const args = filter.symbol ? [runId, filter.symbol] : [runId];
   const sigs = store.db
     .prepare(
-      `SELECT id, symbol, direction, outcome, realized_r, max_favorable_r, max_adverse_r, status FROM signals WHERE ${where}`,
+      `SELECT id, ts, symbol, direction, score, outcome, realized_r, max_favorable_r, max_adverse_r, status FROM signals WHERE ${where}`,
     )
     .all(...args) as Record<string, any>[];
   const conds = store.db
-    .prepare(`SELECT signal_id, key FROM signal_conditions WHERE signal_id IN (SELECT id FROM signals WHERE ${where})`)
-    .all(...args) as { signal_id: number; key: string }[];
-  const keysById = new Map<number, Set<string>>();
+    .prepare(`SELECT signal_id, key, family FROM signal_conditions WHERE signal_id IN (SELECT id FROM signals WHERE ${where})`)
+    .all(...args) as { signal_id: number; key: string; family: string }[];
+  const keysById = new Map<number, { keys: Set<string>; families: Set<string> }>();
   for (const c of conds) {
-    if (!keysById.has(c.signal_id)) keysById.set(c.signal_id, new Set());
-    keysById.get(c.signal_id)!.add(c.key);
+    if (!keysById.has(c.signal_id)) keysById.set(c.signal_id, { keys: new Set(), families: new Set() });
+    keysById.get(c.signal_id)!.keys.add(c.key);
+    keysById.get(c.signal_id)!.families.add(c.family);
   }
-  const closed: Row[] = sigs
+  const rows: Row[] = sigs
     .filter((s) => s.status === 'CLOSED' && s.realized_r != null)
     .map((s) => ({
-      id: s.id, symbol: s.symbol, direction: s.direction, outcome: s.outcome, r: s.realized_r,
-      mfeR: s.max_favorable_r, maeR: s.max_adverse_r, keys: keysById.get(s.id) ?? new Set(),
+      id: s.id, ts: s.ts, symbol: s.symbol, direction: s.direction, score: s.score, outcome: s.outcome, r: s.realized_r,
+      mfeR: s.max_favorable_r, maeR: s.max_adverse_r,
+      keys: keysById.get(s.id)?.keys ?? new Set(), families: keysById.get(s.id)?.families ?? new Set(),
     }));
+  return { rows, total: sigs.length };
+}
+
+/** Stats for signals containing each tag, versus those without it ("lift" = avgR with minus avgR without). */
+function withWithout(closed: Row[], tagsOf: (r: Row) => Set<string>): ConditionStats[] {
+  const all = [...new Set(closed.flatMap((r) => [...tagsOf(r)]))].sort();
+  return all.map((key) => {
+    const withK = closed.filter((r) => tagsOf(r).has(key));
+    const without = closed.filter((r) => !tagsOf(r).has(key));
+    const s = computeStats(withK);
+    const avgRWithout = without.length ? computeStats(without).avgR : null;
+    return { key, ...s, avgRWithout, nWithout: without.length, lift: avgRWithout == null ? null : s.avgR - avgRWithout };
+  });
+}
+
+export function buildReport(store: Store, runId: string, filter: { symbol?: string } = {}): Report {
+  const { rows: closed, total } = loadClosedRows(store, runId, filter);
 
   const group = (f: (r: Row) => string) => {
     const m = new Map<string, Row[]>();
@@ -90,23 +118,23 @@ export function buildReport(store: Store, runId: string, filter: { symbol?: stri
     return Object.fromEntries([...m].sort().map(([k, v]) => [k, computeStats(v)]));
   };
 
-  const allKeys = [...new Set(closed.flatMap((r) => [...r.keys]))].sort();
-  const byCondition: ConditionStats[] = allKeys.map((key) => {
-    const withK = closed.filter((r) => r.keys.has(key));
-    const without = closed.filter((r) => !r.keys.has(key));
-    const s = computeStats(withK);
-    const avgRWithout = without.length ? computeStats(without).avgR : null;
-    return { key, ...s, avgRWithout, nWithout: without.length, lift: avgRWithout == null ? null : s.avgR - avgRWithout };
-  });
+  const buckets = new Map<number, Row[]>();
+  for (const r of closed) {
+    const b = Math.floor(r.score / 10) * 10;
+    buckets.set(b, [...(buckets.get(b) ?? []), r]);
+  }
 
   return {
     runId,
-    total: sigs.length,
-    open: sigs.length - closed.length,
+    total,
+    open: total - closed.length,
     overall: computeStats(closed),
     byDirection: group((r) => r.direction),
     bySymbol: group((r) => r.symbol),
-    byCondition,
+    byCondition: withWithout(closed, (r) => r.keys),
+    byFamily: withWithout(closed, (r) => r.families),
+    byScoreBucket: [...buckets].sort((a, b) => a[0] - b[0]).map(([b, rows]) => ({ bucket: `${b}-${b + 9}`, ...computeStats(rows) })),
+    byFamilyCount: group((r) => String(r.families.size)),
   };
 }
 
@@ -131,6 +159,18 @@ export function formatReport(r: Report): string {
       (c) =>
         `${c.key.padEnd(22)} ${String(c.n).padStart(5)} ${pct(c.winRate).padStart(7)} ${num(c.avgR).padStart(7)} ${num(c.totalR).padStart(8)} ${num(c.avgRWithout).padStart(9)} ${num(c.lift).padStart(7)}`,
     ),
+    '',
+    'Per indicator family (signals that contained it):',
+    `${'family'.padEnd(22)} ${'n'.padStart(5)} ${'win%'.padStart(7)} ${'avgR'.padStart(7)} ${'totR'.padStart(8)} ${'avgR w/o'.padStart(9)} ${'lift'.padStart(7)}`,
+    ...r.byFamily.map(
+      (c) =>
+        `${c.key.padEnd(22)} ${String(c.n).padStart(5)} ${pct(c.winRate).padStart(7)} ${num(c.avgR).padStart(7)} ${num(c.totalR).padStart(8)} ${num(c.avgRWithout).padStart(9)} ${num(c.lift).padStart(7)}`,
+    ),
+    '',
+    'By score (does a higher score do better?):',
+    head,
+    ...r.byScoreBucket.map((b) => line(b.bucket, b)),
+    ...Object.entries(r.byFamilyCount).map(([k, s]) => line(`${k} families`, s)),
     '',
     'Outcomes: ' + (Object.entries(r.overall.outcomes).map(([k, v]) => `${k}=${v}`).join('  ') || '-'),
     'R model: -1R at stop; after T1, half is banked and the rest runs to T2 or the original stop (see signals.tracking.t1Fraction).',

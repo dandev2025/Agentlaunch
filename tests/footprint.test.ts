@@ -91,7 +91,8 @@ test('buy absorption (bearish) mirrors at the high', () => {
 });
 
 // ---- signal integration ------------------------------------------------------
-const sc = testConfig().signals;
+// These tests assert which conditions fire and exact point sums, so they pin the legacy flat scoring; confluence has its own tests.
+const sc = testConfig((c) => { c.signals.confluence.enabled = false; }).signals;
 const profile: ProfileSnapshot = { ts: 0, poc: 110, val: 100, vah: 120, totalVolume: 1e4, binSize: 1, hvns: [{ price: 105, volume: 1 }, { price: 130, volume: 1 }] };
 const T = 1_000_000;
 const ctx = (o: Partial<EvalContext> = {}): EvalContext => ({
