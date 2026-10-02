@@ -14,6 +14,7 @@ import { VolumeProfile } from '../../src/indicators/volumeProfile.js';
 import { openDb, dbPath } from '../lib/db.js';
 import { configPath } from '../lib/config.js';
 import { buildHeatGrid, toBase64 } from '../lib/grid.js';
+import { fmtDollar } from '../lib/format.js';
 import * as q from '../lib/queries.js';
 
 const cfg = loadConfig('config/config.json');
@@ -233,4 +234,12 @@ test('profile view matches the engine\'s VolumeProfile and its histogram sums to
   assert.equal(p.snapshot!.poc, vp.snapshot(last)!.poc);
   assert.ok(Math.abs(p.bins.reduce((a, b) => a + b.volume, 0) - p.snapshot!.totalVolume) < 1e-6);
   assert.ok(p.bins.every((b, i) => i === 0 || p.bins[i - 1].price < b.price));
+});
+
+test('fmtDollar: dollar sign, thousands separators, decimals scaled to the price', () => {
+  assert.equal(fmtDollar(86052.44), '$86,052.4');
+  assert.equal(fmtDollar(2729), '$2,729.0');
+  assert.equal(fmtDollar(149.9), '$149.90');
+  assert.equal(fmtDollar(0.5), '$0.50000');
+  assert.equal(fmtDollar(1234567.89), '$1,234,567.9');
 });
