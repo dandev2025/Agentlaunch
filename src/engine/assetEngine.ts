@@ -32,6 +32,9 @@ export interface EngineStats {
   alerts: number;
   signals: number;
   footprintEvents: number;
+  /** 1-minute signal evaluations that actually ran. */
+  evaluations: number;
+  /** Why signals did not fire: near-misses (>=2 conditions) by reason, plus `warming_up` / `no_atr` evaluations skipped. */
   rejected: Record<string, number>;
 }
 
@@ -42,7 +45,7 @@ export class AssetEngine {
   readonly profile: VolumeProfile;
   readonly bigBuf: BigTradeBuffer;
   readonly tracker: SignalTracker;
-  readonly stats: EngineStats = { trades: 0, bigTrades: 0, alerts: 0, signals: 0, footprintEvents: 0, rejected: {} };
+  readonly stats: EngineStats = { trades: 0, bigTrades: 0, alerts: 0, signals: 0, footprintEvents: 0, evaluations: 0, rejected: {} };
   private atr: Atr;
   private cooldown = new Cooldown();
   private flips: RecentEvent[] = [];
@@ -212,7 +215,10 @@ export class AssetEngine {
   }
 
   private evaluateSignals(now: number): void {
-    if (!this.isWarm(now)) return;
+    const bump = (k: string) => { this.stats.rejected[k] = (this.stats.rejected[k] ?? 0) + 1; };
+    if (!this.isWarm(now)) return bump('warming_up');
+    this.stats.evaluations++;
+    if (this.atr.value == null) return bump('no_atr'); // needs atrPeriod closed 5m candles
     const sc = this.cfg.signals;
     const price = this.lastPrice;
     const htfHist = this.builders.get(sc.htf.timeframe)!.history;

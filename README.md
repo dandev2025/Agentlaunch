@@ -259,9 +259,24 @@ src/indicators            candles, atr, bigTrades, volumeProfile, divergence
 src/alerts                cooldown, rules, telegram/console notifiers
 src/signals               evaluate (pure scoring+plan), tracker, format
 src/engine                AssetEngine, Pipeline        src/backtest   replay, report, synthetic data
-src/cli                   collect, replay, report, backfill, seed-synthetic, seed-demo, footprint, heatmap, gex, compare
+src/cli                   collect, replay, report, backfill, seed-synthetic, seed-demo, footprint, heatmap, gex, compare, tune
 dashboard/                Next.js read-only dashboard (app/, components/, lib/ data layer, tests/)     tests/  node:test
 ```
+
+## Tuning thresholds on your real data
+The big-trade sizes, wall sizes and alert volume in `config/config.json` are starting points. After the collector has run for a few
+hours:
+```bash
+npm run tune                       # analyses up to the last 24h of stored data
+npm run tune -- --hours 6 --big 20 # --big = target big trades per hour per coin (default 12), --walls = lasting walls/hour (6)
+```
+For each coin it prints the trade-size distribution, how many big trades / walls / alerts your current thresholds produce per hour,
+and the `config.json` value that would give roughly the target rate. Edit the config, restart the collector, and run it again later.
+It only matches *rates* — whether those events are worth acting on is what the Performance page and a week of signals are for.
+If alerts are chatty (more than a handful an hour per coin), raise the big-trade threshold before turning on Telegram.
+
+The collector's per-minute `[signals]` line explains silence: how many 1-minute checks ran per coin and what stopped them
+(`warming_up` = under 30 min of trading seen, `no_atr` = fewer than 14 closed 5m candles, otherwise the reason a near-miss was rejected).
 
 ## Caveats
 - The first run against the real Binance feeds found two bugs that fakes couldn't (the trade endpoint split above, and an order-book

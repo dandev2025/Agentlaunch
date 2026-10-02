@@ -38,6 +38,9 @@ const status = setInterval(() => {
   const s = [...pipeline.engines.values()].map((e) => `${e.symbol}: ${e.stats.trades}t/${e.stats.alerts}a/${e.stats.signals}s`).join('  ');
   console.log(`[status] ${s} msgs agg=${collector.aggMessages} depth=${collector.depthMessages} reconnects=${collector.reconnects} gaps=${collector.gapsFound}(${collector.gapsRecovered} recovered)`);
   for (const w of collector.health()) console.warn(`[WARN] ${w}`);
+  // Why no signals? evaluations that ran, and what stopped the near-misses (or that it is still warming up).
+  const why = [...pipeline.engines.values()].map((e) => `${e.symbol.replace('USDT', '')}: ${e.stats.evaluations} checks${Object.keys(e.stats.rejected).length ? ` (${Object.entries(e.stats.rejected).map(([k, v]) => `${k}=${v}`).join(', ')})` : ''}`).join('  ');
+  console.log(`[signals] ${why}`);
 }, 60_000);
 
 const shutdown = async () => {
