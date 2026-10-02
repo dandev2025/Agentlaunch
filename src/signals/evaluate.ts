@@ -1,5 +1,5 @@
 import type { Config } from '../config/types.js';
-import type { BigTrade, Direction, Level, ProfileSnapshot } from '../core/types.js';
+import type { BigTrade, Direction, Level, ProfileSnapshot, WallView } from '../core/types.js';
 import { profileLevels } from '../alerts/rules.js';
 
 export interface RecentEvent {
@@ -25,12 +25,13 @@ export interface EvalContext {
   divergences: RecentEvent[]; // bullish => LONG, bearish => SHORT
   bigTrades: BigTrade[]; // recent window
   fpEvents?: FootprintMemo[]; // recent footprint detections
+  walls?: WallView[]; // resting walls standing right now (heat map)
   htfZ: number | null;
 }
 
 export interface FiredCondition {
   key: string;
-  family: 'profile' | 'delta' | 'bigtrades' | 'footprint';
+  family: 'profile' | 'delta' | 'bigtrades' | 'footprint' | 'heatmap';
   points: number;
   detail: unknown;
 }
@@ -67,6 +68,7 @@ export function evaluateDirection(
   ctx: EvalContext,
   dir: Direction,
   fpCfg: Pick<Config['footprint'], 'requireAtLevel'> = { requireAtLevel: true },
+  heat: Pick<Config['heatmap'], 'requireAtLevel'> & Pick<Config['heatmap']['wall'], 'minAgeMs' | 'holdFrac'> = { requireAtLevel: true, minAgeMs: 30_000, holdFrac: 0.7 },
 ): Evaluation {
   const long = dir === 'LONG';
   const fail = (reason: string, conditions: FiredCondition[] = [], score = 0): Evaluation => ({ ok: false, reason, conditions, score });
@@ -120,6 +122,27 @@ export function evaluateDirection(
     if (!ev) continue;
     if (fpCfg.requireAtLevel && !(level && level.price >= ev.lo - ctx.near && level.price <= ev.hi + ctx.near)) continue;
     conditions.push({ key, family: 'footprint', points: w(key), detail: ev.detail });
+  }
+
+  // 5) Heat map: a persistent resting wall under (long) / over (short) price that is holding
+  {
+    const tol = ctx.profile.binSize / 2; // wall prices are bin labels, so allow half a bin of slop
+    const holding = (ctx.walls ?? [])
+      .filter((wl) => {
+        if (wl.side !== (long ? 'bid' : 'ask')) return false;
+        const dist = long ? ctx.price - wl.price : wl.price - ctx.price; // >0 = wall is on the protective side
+        if (dist < -tol || dist > ctx.near) return false;
+        if (ctx.ts - wl.firstSeen < heat.minAgeMs) return false; // flash orders don't count
+        if (wl.size < heat.holdFrac * wl.peak) return false; // already being eaten / pulled
+        return !heat.requireAtLevel || (level != null && Math.abs(wl.price - level.price) <= ctx.near);
+      })
+      .sort((a, b) => b.size - a.size)[0];
+    if (holding) {
+      conditions.push({
+        key: 'wall_holding', family: 'heatmap', points: w('wall_holding'),
+        detail: { side: holding.side, price: holding.price, size: holding.size, peak: holding.peak, ageMs: ctx.ts - holding.firstSeen, executed: holding.executed },
+      });
+    }
   }
 
   const score = conditions.reduce((s, c) => s + c.points, 0);

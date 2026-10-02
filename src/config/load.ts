@@ -29,6 +29,15 @@ export function validateConfig(cfg: Config): void {
     if (fp.stackedMin < 2) errs.push('footprint.stackedMin must be >= 2');
     pos(fp.imbalanceRatio, 'footprint.imbalanceRatio');
   }
+  const hm = cfg.heatmap;
+  if (hm?.enabled) {
+    if (!cfg.collector.depth.enabled) errs.push('heatmap.enabled requires collector.depth.enabled');
+    for (const [sym, a] of Object.entries(cfg.assets)) pos(a.wallMinQty, `assets.${sym}.wallMinQty`);
+    if (!(hm.rangePct > 0 && hm.rangePct <= 0.1)) errs.push('heatmap.rangePct must be in (0, 0.1]');
+    pos(hm.trackIntervalMs, 'heatmap.trackIntervalMs');
+    if (hm.wall.dropFrac <= 0 || hm.wall.dropFrac >= 1) errs.push('heatmap.wall.dropFrac must be in (0,1)');
+    if (hm.wall.holdFrac <= hm.wall.dropFrac || hm.wall.holdFrac > 1) errs.push('heatmap.wall.holdFrac must be in (dropFrac, 1]');
+  }
   const s = cfg.signals;
   if (s) {
     pos(s.threshold, 'signals.threshold');

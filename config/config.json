@@ -8,7 +8,8 @@
         "minQty": 3,
         "minNotionalUsd": null
       },
-      "footprintBin": 5
+      "footprintBin": 5,
+      "wallMinQty": 100
     },
     "ETHUSDT": {
       "enabled": true,
@@ -17,7 +18,8 @@
         "minQty": 80,
         "minNotionalUsd": null
       },
-      "footprintBin": 0.25
+      "footprintBin": 0.25,
+      "wallMinQty": 2000
     },
     "SOLUSDT": {
       "enabled": true,
@@ -26,7 +28,8 @@
         "minQty": 2000,
         "minNotionalUsd": null
       },
-      "footprintBin": 0.02
+      "footprintBin": 0.02,
+      "wallMinQty": 40000
     }
   },
   "timeframes": [
@@ -38,9 +41,9 @@
     "wsBaseUrl": "wss://fstream.binance.com",
     "restBaseUrl": "https://fapi.binance.com",
     "depth": {
-      "enabled": false,
-      "levels": 20,
-      "speedMs": 100
+      "enabled": true,
+      "snapshotLimit": 1000,
+      "speedMs": 500
     },
     "pingIntervalMs": 15000,
     "staleAfterMs": 30000,
@@ -84,6 +87,25 @@
     },
     "requireAtLevel": true
   },
+  "heatmap": {
+    "enabled": true,
+    "trackIntervalMs": 1000,
+    "rangePct": 0.01,
+    "snapshot": {
+      "persist": true,
+      "intervalMs": 30000,
+      "retentionHours": 72
+    },
+    "wall": {
+      "relMult": 4,
+      "dropFrac": 0.2,
+      "eatenFrac": 0.5,
+      "changeFrac": 0.25,
+      "minAgeMs": 30000,
+      "holdFrac": 0.7
+    },
+    "requireAtLevel": true
+  },
   "alerts": {
     "maxAgeMs": 60000,
     "bigTradeAtLevel": {
@@ -102,6 +124,20 @@
       ],
       "lookbackCandles": 12,
       "cooldownMs": 900000
+    },
+    "wall": {
+      "enabled": true,
+      "events": [
+        "pulled",
+        "eaten"
+      ],
+      "levels": [
+        "POC",
+        "HVN",
+        "VAH",
+        "VAL"
+      ],
+      "cooldownMs": 300000
     }
   },
   "signals": {
@@ -120,7 +156,8 @@
       "divergence": 25,
       "big_prints": 25,
       "fp_stacked_imbalance": 20,
-      "fp_absorption": 25
+      "fp_absorption": 25,
+      "wall_holding": 20
     },
     "deltaFlip": {
       "timeframe": "5m",

@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { BigTrade, Candle, Direction, FootprintCandle, FootprintEvent, Trade } from '../core/types.js';
+import type { BigTrade, Candle, Direction, FootprintCandle, FootprintEvent, Trade, WallEventType, WallSide } from '../core/types.js';
 import { MIGRATIONS } from './migrations.js';
 
 export interface SignalRow {
@@ -49,6 +49,19 @@ export interface SignalUpdate {
   maxFavorableR: number;
   maxAdverseR: number;
   closed: boolean;
+}
+
+export interface WallRow {
+  id: number;
+  symbol: string;
+  side: WallSide;
+  price: number;
+  firstSeen: number;
+  lastSeen: number;
+  peak: number;
+  lastSize: number;
+  status: string;
+  executed: number;
 }
 
 export const LIVE_RUN = 'live';
@@ -180,6 +193,63 @@ export class Store {
     this.st(
       'INSERT INTO footprint_events (run_id, ts, symbol, tf, kind, direction, lo, hi, detail) VALUES (?,?,?,?,?,?,?,?,?)',
     ).run(this.runId, e.ts, e.symbol, e.tf, e.kind, e.direction, e.lo, e.hi, JSON.stringify(e.detail));
+  }
+
+  // ---- heat map -----------------------------------------------------------
+  recordOrderbookSnapshot(symbol: string, ts: number, bids: [number, number][], asks: [number, number][]): void {
+    this.st('INSERT OR REPLACE INTO orderbook_snapshots (symbol, ts, bids, asks) VALUES (?,?,?,?)').run(
+      symbol, ts, JSON.stringify(bids), JSON.stringify(asks),
+    );
+  }
+
+  pruneOrderbookSnapshots(beforeTs: number): number {
+    return Number(this.st('DELETE FROM orderbook_snapshots WHERE ts < ?').run(beforeTs).changes);
+  }
+
+  insertWall(w: { symbol: string; side: WallSide; price: number; ts: number; size: number }): number {
+    const r = this.st(
+      `INSERT INTO book_walls (symbol, side, price, first_seen, last_seen, peak_size, last_size, status)
+       VALUES (?,?,?,?,?,?,?, 'active')`,
+    ).run(w.symbol, w.side, w.price, w.ts, w.ts, w.size, w.size);
+    return Number(r.lastInsertRowid);
+  }
+
+  updateWall(id: number, u: { ts: number; size: number; peak: number; executed: number; status?: string; detail?: unknown }): void {
+    this.st(
+      `UPDATE book_walls SET last_seen = ?, last_size = ?, peak_size = ?, executed = ?,
+         status = COALESCE(?, status), detail = COALESCE(?, detail) WHERE id = ?`,
+    ).run(u.ts, u.size, u.peak, u.executed, u.status ?? null, u.detail === undefined ? null : JSON.stringify(u.detail), id);
+  }
+
+  recordWallEvent(wallId: number, ts: number, type: WallEventType, size: number): void {
+    this.st('INSERT INTO book_wall_events (wall_id, ts, type, size) VALUES (?,?,?,?)').run(wallId, ts, type, size);
+  }
+
+  /** Walls still marked active when the process starts were orphaned by a restart: close them at their last update. */
+  closeStaleWalls(): number {
+    return Number(this.st("UPDATE book_walls SET status = 'expired' WHERE status = 'active'").run().changes);
+  }
+
+  loadWalls(symbols: string[], fromTs: number, toTs: number): WallRow[] {
+    const ph = symbols.map(() => '?').join(',');
+    const rows = this.db
+      .prepare(
+        `SELECT id, symbol, side, price, first_seen, last_seen, peak_size, last_size, status, executed FROM book_walls
+         WHERE symbol IN (${ph}) AND last_seen >= ? AND first_seen <= ? ORDER BY first_seen`,
+      )
+      .all(...symbols, fromTs, toTs) as Record<string, any>[];
+    return rows.map((r) => ({
+      id: r.id, symbol: r.symbol, side: r.side, price: r.price, firstSeen: r.first_seen, lastSeen: r.last_seen,
+      peak: r.peak_size, lastSize: r.last_size, status: r.status, executed: r.executed,
+    }));
+  }
+
+  loadWallEvents(wallIds: number[]): { wallId: number; ts: number; type: WallEventType; size: number }[] {
+    const out: { wallId: number; ts: number; type: WallEventType; size: number }[] = [];
+    const s = this.db.prepare('SELECT wall_id, ts, type, size FROM book_wall_events WHERE wall_id = ? ORDER BY ts, id');
+    for (const id of wallIds)
+      for (const r of s.all(id) as Record<string, any>[]) out.push({ wallId: r.wall_id, ts: r.ts, type: r.type, size: r.size });
+    return out;
   }
 
   recordBigTrade(b: BigTrade): void {

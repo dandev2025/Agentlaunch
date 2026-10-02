@@ -23,6 +23,7 @@ const res = runReplay(store, cfg, {
   onProgress: (n, ts) => console.log(`  …${n} trades, at ${new Date(ts).toISOString()}`),
 });
 console.log(`Replayed ${res.trades} trades ${new Date(res.fromTs).toISOString()} → ${new Date(res.toTs).toISOString()} as run "${runId}"`);
+if (res.walls === 0) console.log('  (no stored heat-map walls in this range — wall_holding cannot fire in this replay)');
 for (const [s, p] of Object.entries(res.perSymbol))
   console.log(`  ${s}: bigTrades=${p.bigTrades} alerts=${p.alerts} signals=${p.signals} rejected=${JSON.stringify(p.rejected)}`);
 if (!a['no-report']) console.log('\n' + formatReport(buildReport(store, runId)));

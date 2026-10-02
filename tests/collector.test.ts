@@ -20,8 +20,8 @@ const frame = (s: string, a: number, p = 100, q = 1, m = false, T = Date.now()) 
   JSON.stringify({ stream: `${s.toLowerCase()}@aggTrade`, data: { e: 'aggTrade', s, a, p: String(p), q: String(q), T, m } });
 
 test('url + parsing: m=true means aggressor SELL', () => {
-  const url = streamUrl('wss://x/', ['BTCUSDT', 'ETHUSDT'], { enabled: true, levels: 20, speedMs: 100 });
-  assert.equal(url, 'wss://x/stream?streams=btcusdt@aggTrade/btcusdt@depth20@100ms/ethusdt@aggTrade/ethusdt@depth20@100ms');
+  const url = streamUrl('wss://x/', ['BTCUSDT', 'ETHUSDT'], { enabled: true, speedMs: 500 });
+  assert.equal(url, 'wss://x/stream?streams=btcusdt@aggTrade/btcusdt@depth@500ms/ethusdt@aggTrade/ethusdt@depth@500ms');
   const d = { e: 'aggTrade', s: 'BTCUSDT', a: 5, p: '100.5', q: '0.25', T: 123, m: true };
   assert.deepEqual(parseAggTrade(d), { symbol: 'BTCUSDT', aggId: 5, ts: 123, price: 100.5, size: 0.25, side: 'sell' });
   assert.equal(parseAggTrade({ ...d, m: false })!.side, 'buy');

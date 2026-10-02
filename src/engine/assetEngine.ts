@@ -1,9 +1,9 @@
 import type { Config } from '../config/types.js';
-import { TF_MS, type Candle, type Direction, type FootprintCandle, type Timeframe, type Trade } from '../core/types.js';
+import { TF_MS, type Candle, type Direction, type FootprintCandle, type Timeframe, type Trade, type WallEvent, type WallSource } from '../core/types.js';
 import type { Store } from '../db/store.js';
 import { Cooldown } from '../alerts/cooldown.js';
 import type { Notifier } from '../alerts/notifier.js';
-import { bigTradeAtLevel, divergenceMessage } from '../alerts/rules.js';
+import { bigTradeAtLevel, divergenceMessage, wallEventAtLevel } from '../alerts/rules.js';
 import { Atr } from '../indicators/atr.js';
 import { BigTradeBuffer, isBigTrade, toBigTrade } from '../indicators/bigTrades.js';
 import { CandleBuilder } from '../indicators/candles.js';
@@ -19,6 +19,8 @@ export interface EngineDeps {
   notifier: Notifier;
   /** Persist closed candles (live only; replay derives them from trades). */
   persistCandles?: boolean;
+  /** Source of standing walls: the live heat-map service, or a replay timeline built from stored walls. */
+  walls?: WallSource;
   log?: (msg: string) => void;
 }
 
@@ -144,6 +146,18 @@ export class AssetEngine {
     this.fpVolumes.set(tf, vols);
   }
 
+  /** Live wall lifecycle events from the heat-map service. Alerts only for events at profile levels. */
+  onWallEvent(e: WallEvent): void {
+    const rule = this.cfg.alerts.wall;
+    if (this.silent || !rule.enabled || !rule.events.includes(e.type)) return;
+    const snap = this.snapshot(e.ts);
+    if (!snap) return;
+    const hit = wallEventAtLevel(e, snap, rule.levels, this.nearDistance(e.wall.price));
+    if (hit && this.cooldown.tryFire(`wall:${this.symbol}:${e.wall.side}:${e.type}:${hit.level.kind}:${hit.level.price}`, e.ts, rule.cooldownMs)) {
+      this.emitAlert(e.ts, `wall_${e.type}`, hit.message, hit.inputs);
+    }
+  }
+
   private emitAlert(ts: number, type: string, message: string, inputs: unknown): void {
     this.stats.alerts++;
     this.deps.store.recordAlert(ts, this.symbol, type, message, inputs);
@@ -190,11 +204,14 @@ export class AssetEngine {
     const ctx = {
       symbol: this.symbol, ts: now, price, atr: this.atr.value, near: this.nearDistance(price),
       profile: this.snapshot(now), flips: this.flips, divergences: this.divs, fpEvents: this.fpEvents,
+      walls: this.deps.walls?.activeWalls(this.symbol, now),
       bigTrades: this.bigBuf.recent(now),
       htfZ: htfDeltaZ(htfHist, sc.htf.lookbackCandles, sc.htf.historyCandles, sc.htf.minHistory),
     };
     for (const dir of ['LONG', 'SHORT'] as const) {
-      const ev = evaluateDirection(sc, ctx, dir, this.cfg.footprint);
+      const ev = evaluateDirection(sc, ctx, dir, this.cfg.footprint, {
+        requireAtLevel: this.cfg.heatmap.requireAtLevel, minAgeMs: this.cfg.heatmap.wall.minAgeMs, holdFrac: this.cfg.heatmap.wall.holdFrac,
+      });
       if (!ev.ok) {
         // Count only near-misses (at least 2 conditions) to keep the stats meaningful.
         if (ev.conditions.length >= 2) this.stats.rejected[ev.reason] = (this.stats.rejected[ev.reason] ?? 0) + 1;

@@ -5,7 +5,7 @@ scored LONG/SHORT signals to Telegram**. **There is no order execution anywhere 
 Every alert and signal is logged to SQLite together with the inputs that triggered it, and every
 signal's outcome (stop / T1 / T2, max move for and against) is tracked automatically.
 
-Status: **Phase 1, 1B and Footprint built.** Heat map, GEX, confluence and the Next.js dashboard are
+Status: **Phase 1, 1B, Footprint and Heat map built.** GEX, the confluence engine and the Next.js dashboard are
 later phases (schema is already reserved, see below).
 
 ## Setup
@@ -16,7 +16,7 @@ The only runtime dependency is `ws`. No paid API keys are used or needed.
 ```bash
 npm install
 cp .env.example .env        # optional: add TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
-npm test                    # 64 tests
+npm test                    # 88 tests
 npm run typecheck
 ```
 
@@ -63,8 +63,7 @@ AssetEngine: candles+delta (1m/5m/15m) · big trades · rolling volume profile �
   trades update candles/profile/delta but never fire alerts or signals (they'd be stale).
 - On startup the last `warmupMinutes` of stored trades are replayed silently so ATR, profile and delta
   history are warm.
-- The depth stream can be subscribed (`collector.depth.enabled`) but is only counted in Phase 1;
-  the heat-map phase will consume it.
+- The depth stream feeds the heat map (see below); set `heatmap.enabled`/`collector.depth.enabled` to false to run trades-only.
 
 ### Indicators (`src/indicators`, each pure and unit-tested)
 | Module | What |
@@ -74,6 +73,7 @@ AssetEngine: candles+delta (1m/5m/15m) · big trades · rolling volume profile �
 | `volumeProfile.ts` | rolling window (default 24h), POC, 70% value area (VAH/VAL), HVNs (local maxima ≥ `hvnFactor`× mean bin volume) |
 | `divergence.ts` | CVD divergence vs previous N candles; delta flip; 15m delta z-score |
 | `atr.ts` | Wilder ATR |
+| `walls.ts` | resting-wall lifecycle on the L2 book: added / changed / pulled / eaten / expired |
 | `footprint.ts` | bid/ask volume per price bin per candle, diagonal stacked imbalance, absorption |
 
 "At or near" a level = within `max(proximity.atrMult × ATR(5m), proximity.minBins × binSize)`
@@ -91,6 +91,8 @@ Each 1m close, per asset and direction, conditions earn configurable points:
 
 | `fp_stacked_imbalance` | footprint | stacked **buy** imbalance zone at the level | stacked **sell** imbalance |
 | `fp_absorption` | footprint | sell absorption at the lows (aggressive selling absorbed, price closes back up) | buy absorption at the highs |
+
+| `wall_holding` | heatmap | a bid wall holding just under price at the level | an ask wall holding just over price |
 
 Delta events stay valid for `conditionTtlMs` (20 min). A signal fires only if **all** hold:
 1. ≥ `minConditions` (3, enforced by config validation) distinct conditions, from ≥ `minFamilies` (2) indicator families
@@ -124,6 +126,26 @@ aggressive buys are recorded as **ask** volume and aggressive sells as **bid** v
   `footprint_levels` (live only). Inspect real candles with `npm run footprint -- --symbol BTCUSDT --tf 5m --last 3`.
 - No separate footprint alert is sent in this phase; footprint feeds signal scoring only.
 
+### Heat map (`src/collector/orderbook.ts`, `heatmap.ts`, `src/indicators/walls.ts`)
+- **Book:** the collector subscribes to Binance's *diff* depth stream (`<symbol>@depth@500ms`) and keeps a local L2 book per
+  symbol, synced from a REST snapshot (`/fapi/v1/depth`) using Binance's documented rules: drop events with `u < lastUpdateId`,
+  the first applied event must cover the snapshot (`U ≤ lastUpdateId ≤ u`), later events must chain (`pu == previous u`).
+  Any break, or a WebSocket reconnect, discards the book and resyncs. (The 20-level partial book is far too shallow for BTC.)
+- **Snapshots:** every `snapshot.intervalMs` (30s) the book within ±`rangePct` (1%) of mid, aggregated to the asset's `binSize`,
+  is stored in `orderbook_snapshots` (pruned after `retentionHours`). Raw full-depth history is deliberately *not* stored.
+- **Walls:** each second, a level (bin) is a wall if its size ≥ max(`assets.*.wallMinQty`, `relMult` × median level size).
+  It ends when size falls below `dropFrac` × its peak and is classified **eaten** (aggressive trades hit it for ≥ `eatenFrac` × peak,
+  or price printed through it) or **pulled** (cancelled without being traded into; `spoofLike` if it lived < 10s untraded).
+  **expired** means tracking stopped (left the range / book desynced) and implies nothing about intent. Lifecycles go to
+  `book_walls` + `book_wall_events`; `npm run heatmap -- --symbol BTCUSDT --hours 6` lists them.
+  Resolution is the tracking interval, so a pull immediately before a sweep can be mislabelled "eaten".
+- **Alerts:** `pulled`/`eaten` walls within "near" of a POC/HVN/VAH/VAL level (`alerts.wall`, with cooldown).
+- **Signal:** `wall_holding` — a wall on the protective side, within `near` of price, at least `minAgeMs` old (filters flash orders),
+  still ≥ `holdFrac` of its peak, and (with `requireAtLevel`) at the profile level the signal is built on.
+- **Replay:** walls are rebuilt from the stored lifecycle, so `wall_holding` is backtestable *for periods you were collecting*.
+  Size is known at event granularity (changes ≥ `changeFrac`) and `executed` is not reconstructed. Wall alerts are live-only.
+  `npm run replay` warns when the range has no stored walls.
+
 ### Config (`config/config.json`)
 Single file, validated on load: assets (enable/disable, `binSize`, big-trade thresholds), timeframes,
 profile settings, alert rules and **cooldowns**, signal weights/threshold/filters/risk/tracking.
@@ -134,8 +156,8 @@ the actual size distribution you see (`big_trades` table) before trusting alerts
 `trades` (symbol, agg_id, ts, price, size, side) · `candles` · `big_trades` · `alerts` (message + JSON inputs) ·
 `signals` (plan, JSON inputs, outcome, MFE/MAE) · `signal_conditions` (one row per fired condition) · `gaps`.
 
-`footprint_levels` and `footprint_events` are used by the footprint phase. Reserved for later phases (created, unused):
-`orderbook_snapshots`, `book_walls` (added/pulled/eaten), `gex_snapshots`. New signal conditions need no schema change — they are just new
+`footprint_levels`/`footprint_events` (footprint) and `orderbook_snapshots`/`book_walls`/`book_wall_events` (heat map) are in use.
+Reserved for a later phase (created, unused): `gex_snapshots`. New signal conditions need no schema change — they are just new
 `signal_conditions.key`/`family` values with weights in config. Migrations live in `src/db/migrations.ts`
 (append-only, tracked by `PRAGMA user_version`); moving to Postgres/Supabase means swapping `src/db/store.ts`.
 
@@ -148,7 +170,7 @@ src/indicators            candles, atr, bigTrades, volumeProfile, divergence
 src/alerts                cooldown, rules, telegram/console notifiers
 src/signals               evaluate (pure scoring+plan), tracker, format
 src/engine                AssetEngine, Pipeline        src/backtest   replay, report, synthetic data
-src/cli                   collect, replay, report, backfill, seed-synthetic, footprint     tests/  node:test
+src/cli                   collect, replay, report, backfill, seed-synthetic, footprint, heatmap     tests/  node:test
 ```
 
 ## Caveats
@@ -159,4 +181,7 @@ src/cli                   collect, replay, report, backfill, seed-synthetic, foo
   Binance's current docs and change `collector.wsBaseUrl`.
 - `seed-synthetic` data is fabricated (a mean-reverting random walk). Replay results on it only prove the
   pipeline works; they say nothing about edge. Judge weights on real data with a meaningful number of signals.
+- The order-book sync and wall tracking are tested against a fake exchange, not the real depth feed. Check `[heatmap]` log lines
+  and `npm run heatmap` after a few hours of collecting; `wallMinQty` and `relMult` are untuned placeholders. Depth traffic is
+  much heavier than trades alone (three symbols at 500ms).
 - CVD is cumulative since process/replay start, not exchange-session aligned.
