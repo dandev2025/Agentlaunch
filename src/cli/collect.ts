@@ -36,7 +36,8 @@ bot?.start();
 
 const status = setInterval(() => {
   const s = [...pipeline.engines.values()].map((e) => `${e.symbol}: ${e.stats.trades}t/${e.stats.alerts}a/${e.stats.signals}s`).join('  ');
-  console.log(`[status] ${s} reconnects=${collector.reconnects} gaps=${collector.gapsFound}(${collector.gapsRecovered} recovered)`);
+  console.log(`[status] ${s} msgs agg=${collector.aggMessages} depth=${collector.depthMessages} reconnects=${collector.reconnects} gaps=${collector.gapsFound}(${collector.gapsRecovered} recovered)`);
+  for (const w of collector.health()) console.warn(`[WARN] ${w}`);
 }, 60_000);
 
 const shutdown = async () => {

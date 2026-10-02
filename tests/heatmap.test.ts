@@ -84,22 +84,22 @@ class FakeWs extends EventEmitter implements WsLike {
   ping() {} terminate() {} close() {}
 }
 
-test('collector routes depth frames to the heat map and a disconnect desyncs the book', async () => {
+test('collector routes depth frames (from the /public connection) to the heat map and a disconnect desyncs the book', async () => {
   const cfg = btcOnly();
   const store = new Store(':memory:');
   const heat = new HeatmapService(cfg, store, { fetchJson: async () => BTC_SNAPSHOT, log: () => {} });
   const pipeline = new Pipeline(cfg, { store, notifier: new MemoryNotifier(), walls: heat });
-  const ws = new FakeWs();
-  const col = new LiveCollector(cfg, store, pipeline, { wsFactory: () => ws, log: () => {}, heat });
+  const sockets: Record<string, FakeWs> = {};
+  const col = new LiveCollector(cfg, store, pipeline, { wsFactory: (url) => { const w = new FakeWs(); sockets[url.includes('/public/') ? 'public' : 'market'] = w; return w; }, log: () => {}, heat });
   col.start();
-  ws.emit('open');
+  sockets.public.emit('open'); sockets.market.emit('open');
   const frame = (U: number, u: number, pu: number) =>
     JSON.stringify({ stream: 'btcusdt@depth@500ms', data: { e: 'depthUpdate', s: 'BTCUSDT', U, u, pu, b: [], a: [] } });
-  ws.emit('message', frame(99, 101, 98));
+  sockets.public.emit('message', frame(99, 101, 98));
   await tick();
   assert.equal(col.depthMessages, 1);
   assert.equal(heat.syncs.get('BTCUSDT')!.state, 'live');
-  ws.emit('close', 1006);
+  sockets.public.emit('close', 1006);
   assert.equal(heat.syncs.get('BTCUSDT')!.state, 'init');
   await col.stop();
 });

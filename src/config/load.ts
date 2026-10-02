@@ -29,6 +29,8 @@ export function validateConfig(cfg: Config): void {
     if (fp.stackedMin < 2) errs.push('footprint.stackedMin must be >= 2');
     pos(fp.imbalanceRatio, 'footprint.imbalanceRatio');
   }
+  if (/\/(ws|stream|market|public|private)(\/|\?|$)/.test(cfg.collector?.wsBaseUrl ?? ''))
+    errs.push('collector.wsBaseUrl must be the root (e.g. wss://fstream.binance.com): the collector adds /market and /public itself');
   const hm = cfg.heatmap;
   if (hm?.enabled) {
     if (!cfg.collector.depth.enabled) errs.push('heatmap.enabled requires collector.depth.enabled');

@@ -2,7 +2,7 @@ import type { Config } from '../config/types.js';
 import type { Trade } from '../core/types.js';
 import type { Store } from '../db/store.js';
 import type { Pipeline } from '../engine/pipeline.js';
-import { BinanceStream, parseAggTrade, streamUrl, type WsFactory } from './binance.js';
+import { BinanceStream, parseAggTrade, streamUrl, type StreamKind, type WsFactory } from './binance.js';
 import { fetchAggTradesRange, GapDetector, type FetchJson } from './gaps.js';
 import type { HeatmapService } from './heatmap.js';
 
@@ -21,14 +21,20 @@ export interface LiveOptions {
  * live trade that revealed the gap.
  */
 export class LiveCollector {
-  private stream: BinanceStream;
+  /** One connection per Binance endpoint: trades on /market, order book on /public (only when the heat map is on). */
+  private streams: { kind: StreamKind; stream: BinanceStream }[] = [];
+  private openedAt: Record<StreamKind, number | null> = { market: null, public: null };
+  private unparsedSamples = 0;
   private gaps = new GapDetector();
   private chains = new Map<string, Promise<void>>();
   private buffer: Trade[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
   private log: (m: string) => void;
   private now: () => number;
+  aggMessages = 0;
   depthMessages = 0;
+  /** Frames that were neither a depth update nor a readable aggTrade (the first few are logged). */
+  unparsedMessages = 0;
   gapsFound = 0;
   gapsRecovered = 0;
 
@@ -36,20 +42,28 @@ export class LiveCollector {
     this.log = o.log ?? ((m) => console.log(`[collector] ${m}`));
     this.now = o.now ?? Date.now;
     const c = cfg.collector;
-    this.stream = new BinanceStream({
-      url: streamUrl(c.wsBaseUrl, pipeline.symbols, c.depth),
-      pingIntervalMs: c.pingIntervalMs,
-      staleAfterMs: c.staleAfterMs,
-      reconnectMinDelayMs: c.reconnectMinDelayMs,
-      reconnectMaxDelayMs: c.reconnectMaxDelayMs,
-      wsFactory: o.wsFactory,
-      onStatus: (s, info) => {
-        this.log(`ws ${s}${info ? `: ${info}` : ''}`);
-        // Depth events are lost while disconnected, so any open book can no longer be trusted.
-        if (s === 'closed' || s === 'stale') this.o.heat?.onStreamReconnect();
-      },
-      onMessage: (m) => this.onMessage(m),
-    });
+    const kinds: StreamKind[] = ['market'];
+    if (c.depth.enabled && o.heat) kinds.push('public'); // nobody would consume depth without the heat-map service
+    for (const kind of kinds) {
+      this.streams.push({
+        kind,
+        stream: new BinanceStream({
+          url: streamUrl(c.wsBaseUrl, kind, pipeline.symbols, c.depth),
+          pingIntervalMs: c.pingIntervalMs,
+          staleAfterMs: c.staleAfterMs,
+          reconnectMinDelayMs: c.reconnectMinDelayMs,
+          reconnectMaxDelayMs: c.reconnectMaxDelayMs,
+          wsFactory: o.wsFactory,
+          onStatus: (s, info) => {
+            this.log(`ws[${kind}] ${s}${info ? `: ${info}` : ''}`);
+            this.openedAt[kind] = s === 'open' ? this.now() : s === 'connecting' ? this.openedAt[kind] : null;
+            // Depth events are lost while the order-book connection is down, so any open book can no longer be trusted.
+            if (kind === 'public' && (s === 'closed' || s === 'stale')) this.o.heat?.onStreamReconnect();
+          },
+          onMessage: (m) => this.onMessage(m),
+        }),
+      });
+    }
   }
 
   /** Re-feed recent stored trades silently so ATR / profile / delta history are warm. */
@@ -68,27 +82,44 @@ export class LiveCollector {
 
   start(): void {
     this.flushTimer = setInterval(() => this.flush(), this.cfg.collector.flushIntervalMs);
-    this.stream.start();
+    for (const x of this.streams) x.stream.start();
   }
 
   async stop(): Promise<void> {
-    this.stream.stop();
+    for (const x of this.streams) x.stream.stop();
     if (this.flushTimer) clearInterval(this.flushTimer);
     await Promise.all(this.chains.values());
     this.flush();
     this.pipeline.flush();
   }
 
+  /** The trade connection is up (the one everything depends on). */
   get connected(): boolean {
-    return this.stream.connected;
+    return this.streams.find((x) => x.kind === 'market')?.stream.connected ?? false;
   }
 
+  /** When the last frame arrived on the trade connection. */
   get lastFrameAt(): number {
-    return this.stream.lastFrameAt;
+    return this.streams.find((x) => x.kind === 'market')?.stream.lastFrameAt ?? 0;
   }
 
   get reconnects(): number {
-    return this.stream.reconnects;
+    return this.streams.reduce((n, x) => n + x.stream.reconnects, 0);
+  }
+
+  /**
+   * Things that look broken even though nothing crashed — chiefly a connection that is open but delivers nothing
+   * (which is exactly what a changed Binance endpoint looks like). Printed with every status line.
+   */
+  health(now = this.now()): string[] {
+    const w: string[] = [];
+    const silentFor = (kind: StreamKind) => (this.openedAt[kind] == null ? 0 : now - this.openedAt[kind]!);
+    if (silentFor('market') > 60_000 && this.aggMessages === 0)
+      w.push(`connected to the trade stream for ${Math.round(silentFor('market') / 1000)}s but no trades have arrived — Binance may have changed its endpoints (see README, "Binance WebSocket endpoints")`);
+    if (this.streams.some((x) => x.kind === 'public') && silentFor('public') > 60_000 && this.depthMessages === 0)
+      w.push(`connected to the order-book stream for ${Math.round(silentFor('public') / 1000)}s but no depth updates have arrived`);
+    if (this.unparsedMessages > 0) w.push(`${this.unparsedMessages} message(s) could not be read (check the log for samples)`);
+    return w;
   }
 
   flush(): void {
@@ -115,7 +146,12 @@ export class LiveCollector {
       return;
     }
     const t = parseAggTrade(m.data);
-    if (!t) return;
+    if (!t) {
+      this.unparsedMessages++;
+      if (this.unparsedSamples++ < 3) this.log(`unreadable message on ${m.stream}: ${JSON.stringify(m.data).slice(0, 200)}`);
+      return;
+    }
+    this.aggMessages++;
     const prev = this.chains.get(t.symbol) ?? Promise.resolve();
     this.chains.set(t.symbol, prev.then(() => this.process(t)).catch((e) => this.log(`process error: ${(e as Error).message}`)));
   }
