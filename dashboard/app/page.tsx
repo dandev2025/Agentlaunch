@@ -3,7 +3,7 @@ import { AutoRefresh } from '../components/AutoRefresh';
 import { Empty, NoDb, SignalsTable } from '../components/ui';
 import { dashConfig } from '../lib/config';
 import { openDb } from '../lib/db';
-import { ago, fmtPrice, fmtTime, stripHtml } from '../lib/format';
+import { ago, fmtDollar, fmtPrice, fmtTime, stripHtml } from '../lib/format';
 import { overview } from '../lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -18,14 +18,16 @@ export default function Page() {
     <>
       <h1>Overview <AutoRefresh seconds={10} /></h1>
       <p className="sub">Live run · data as of {fmtTime(o.now)} · everything here is read from the collector&apos;s database</p>
+      <p className="sub">Prices are Binance perpetual futures quoted in USDT (a stablecoin worth about $1), so they read as roughly US dollars.</p>
 
       <div className="grid g3">
         {o.symbols.map((s) => {
           const [cls, label] = health(s.ageMs);
           return (
             <div className="card" key={s.symbol}>
-              <h3>{s.symbol} <span className={`badge ${cls}`}>{label}</span></h3>
-              <div className="big">{s.price == null ? '–' : fmtPrice(s.price)}</div>
+              <h3>{s.symbol.replace('USDT', '')} / USDT <span className={`badge ${cls}`}>{label}</span></h3>
+              <div className="small mut">Current price</div>
+              <div className="big">{s.price == null ? '–' : fmtDollar(s.price)}</div>
               <div className="small mut">last trade {ago(s.ageMs)} ago · {s.trades5m.toLocaleString('en-US')} trades / 5m</div>
               <div className="small" style={{ marginTop: 6 }}>
                 {s.bigTrades24h} big trades 24h · {s.openSignals} open {s.openSignals === 1 ? 'signal' : 'signals'} · {s.activeWalls} {s.activeWalls === 1 ? 'wall' : 'walls'}
