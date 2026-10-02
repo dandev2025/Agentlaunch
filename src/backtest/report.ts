@@ -115,8 +115,8 @@ const num = (x: number | null, d = 2) => (x == null ? '-' : Number.isFinite(x) ?
 
 export function formatReport(r: Report): string {
   const line = (label: string, s: Stats) =>
-    `${label.padEnd(16)} ${String(s.n).padStart(5)} ${pct(s.winRate).padStart(7)} ${num(s.avgR).padStart(7)} ${num(s.totalR).padStart(8)} ${num(s.profitFactor).padStart(6)} ${num(s.avgMfeR).padStart(7)} ${num(s.avgMaeR).padStart(7)}`;
-  const head = `${''.padEnd(16)} ${'n'.padStart(5)} ${'win%'.padStart(7)} ${'avgR'.padStart(7)} ${'totR'.padStart(8)} ${'PF'.padStart(6)} ${'MFE_R'.padStart(7)} ${'MAE_R'.padStart(7)}`;
+    `${label.padEnd(22)} ${String(s.n).padStart(5)} ${pct(s.winRate).padStart(7)} ${num(s.avgR).padStart(7)} ${num(s.totalR).padStart(8)} ${num(s.profitFactor).padStart(6)} ${num(s.avgMfeR).padStart(7)} ${num(s.avgMaeR).padStart(7)}`;
+  const head = `${''.padEnd(22)} ${'n'.padStart(5)} ${'win%'.padStart(7)} ${'avgR'.padStart(7)} ${'totR'.padStart(8)} ${'PF'.padStart(6)} ${'MFE_R'.padStart(7)} ${'MAE_R'.padStart(7)}`;
   const out: string[] = [
     `Backtest report — run "${r.runId}": ${r.total} signals (${r.overall.n} closed, ${r.open} still open/excluded)`,
     '',
@@ -126,10 +126,10 @@ export function formatReport(r: Report): string {
     ...Object.entries(r.bySymbol).map(([k, s]) => line(k, s)),
     '',
     'Per condition (signals that contained it) — "lift" = avgR with minus avgR without:',
-    `${'condition'.padEnd(16)} ${'n'.padStart(5)} ${'win%'.padStart(7)} ${'avgR'.padStart(7)} ${'totR'.padStart(8)} ${'avgR w/o'.padStart(9)} ${'lift'.padStart(7)}`,
+    `${'condition'.padEnd(22)} ${'n'.padStart(5)} ${'win%'.padStart(7)} ${'avgR'.padStart(7)} ${'totR'.padStart(8)} ${'avgR w/o'.padStart(9)} ${'lift'.padStart(7)}`,
     ...r.byCondition.map(
       (c) =>
-        `${c.key.padEnd(16)} ${String(c.n).padStart(5)} ${pct(c.winRate).padStart(7)} ${num(c.avgR).padStart(7)} ${num(c.totalR).padStart(8)} ${num(c.avgRWithout).padStart(9)} ${num(c.lift).padStart(7)}`,
+        `${c.key.padEnd(22)} ${String(c.n).padStart(5)} ${pct(c.winRate).padStart(7)} ${num(c.avgR).padStart(7)} ${num(c.totalR).padStart(8)} ${num(c.avgRWithout).padStart(9)} ${num(c.lift).padStart(7)}`,
     ),
     '',
     'Outcomes: ' + (Object.entries(r.overall.outcomes).map(([k, v]) => `${k}=${v}`).join('  ') || '-'),

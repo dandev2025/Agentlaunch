@@ -75,3 +75,37 @@ export interface Divergence {
 
 export const dirOfSide = (s: Side): Direction => (s === 'buy' ? 'LONG' : 'SHORT');
 export const sign = (d: Direction): 1 | -1 => (d === 'LONG' ? 1 : -1);
+
+/** Footprint: aggressive volume per price level. `ask` = aggressive buys (lift the ask), `bid` = aggressive sells (hit the bid). */
+export interface FootprintLevel {
+  price: number;
+  bid: number;
+  ask: number;
+  trades: number;
+}
+
+export interface FootprintCandle {
+  symbol: string;
+  tf: Timeframe;
+  ts: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  binSize: number;
+  levels: FootprintLevel[]; // dense: ascending price, no holes (empty levels have zero volume)
+  totalBid: number;
+  totalAsk: number;
+}
+
+export interface FootprintEvent {
+  kind: 'stacked_imbalance' | 'absorption';
+  /** Direction this event supports: stacked buy imbalance / sell absorption => LONG; mirror => SHORT. */
+  direction: Direction;
+  symbol: string;
+  tf: Timeframe;
+  ts: number; // candle open
+  lo: number;
+  hi: number;
+  detail: Record<string, unknown>;
+}

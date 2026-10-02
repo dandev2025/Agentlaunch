@@ -1,15 +1,47 @@
 {
   "dbPath": "data/orderflow.db",
   "assets": {
-    "BTCUSDT": { "enabled": true, "binSize": 10,   "bigTrade": { "minQty": 3,    "minNotionalUsd": null } },
-    "ETHUSDT": { "enabled": true, "binSize": 0.5,  "bigTrade": { "minQty": 80,   "minNotionalUsd": null } },
-    "SOLUSDT": { "enabled": true, "binSize": 0.05, "bigTrade": { "minQty": 2000, "minNotionalUsd": null } }
+    "BTCUSDT": {
+      "enabled": true,
+      "binSize": 10,
+      "bigTrade": {
+        "minQty": 3,
+        "minNotionalUsd": null
+      },
+      "footprintBin": 5
+    },
+    "ETHUSDT": {
+      "enabled": true,
+      "binSize": 0.5,
+      "bigTrade": {
+        "minQty": 80,
+        "minNotionalUsd": null
+      },
+      "footprintBin": 0.25
+    },
+    "SOLUSDT": {
+      "enabled": true,
+      "binSize": 0.05,
+      "bigTrade": {
+        "minQty": 2000,
+        "minNotionalUsd": null
+      },
+      "footprintBin": 0.02
+    }
   },
-  "timeframes": ["1m", "5m", "15m"],
+  "timeframes": [
+    "1m",
+    "5m",
+    "15m"
+  ],
   "collector": {
     "wsBaseUrl": "wss://fstream.binance.com",
     "restBaseUrl": "https://fapi.binance.com",
-    "depth": { "enabled": false, "levels": 20, "speedMs": 100 },
+    "depth": {
+      "enabled": false,
+      "levels": 20,
+      "speedMs": 100
+    },
     "pingIntervalMs": 15000,
     "staleAfterMs": 30000,
     "reconnectMinDelayMs": 1000,
@@ -19,7 +51,11 @@
     "maxBackfillTrades": 50000,
     "warmupMinutes": 120
   },
-  "proximity": { "atrMult": 0.5, "minBins": 2, "fallbackPct": 0.0005 },
+  "proximity": {
+    "atrMult": 0.5,
+    "minBins": 2,
+    "fallbackPct": 0.0005
+  },
   "volumeProfile": {
     "windowMinutes": 1440,
     "valueAreaPct": 0.7,
@@ -28,12 +64,42 @@
     "hvnSmoothBins": 1,
     "recomputeMs": 5000
   },
+  "footprint": {
+    "enabled": true,
+    "timeframes": [
+      "5m"
+    ],
+    "persist": true,
+    "imbalanceRatio": 3,
+    "stackedMin": 3,
+    "minVolFrac": 0.02,
+    "absorption": {
+      "zoneFrac": 0.3,
+      "minZoneShare": 0.35,
+      "dominanceRatio": 1.5,
+      "rejectFrac": 0.5,
+      "volMult": 1.3,
+      "volLookback": 20,
+      "minLevels": 4
+    },
+    "requireAtLevel": true
+  },
   "alerts": {
     "maxAgeMs": 60000,
-    "bigTradeAtLevel": { "enabled": true, "levels": ["POC", "HVN"], "cooldownMs": 120000 },
+    "bigTradeAtLevel": {
+      "enabled": true,
+      "levels": [
+        "POC",
+        "HVN"
+      ],
+      "cooldownMs": 120000
+    },
     "deltaDivergence": {
       "enabled": true,
-      "timeframes": ["5m", "15m"],
+      "timeframes": [
+        "5m",
+        "15m"
+      ],
       "lookbackCandles": 12,
       "cooldownMs": 900000
     }
@@ -52,11 +118,26 @@
       "level:HVN": 18,
       "delta_flip": 20,
       "divergence": 25,
-      "big_prints": 25
+      "big_prints": 25,
+      "fp_stacked_imbalance": 20,
+      "fp_absorption": 25
     },
-    "deltaFlip": { "timeframe": "5m", "minMultOfAvg": 0.5, "avgLookback": 20 },
-    "bigPrints": { "windowMs": 300000, "minCount": 1 },
-    "htf": { "timeframe": "15m", "lookbackCandles": 4, "historyCandles": 48, "minHistory": 12, "strongZ": 1.5 },
+    "deltaFlip": {
+      "timeframe": "5m",
+      "minMultOfAvg": 0.5,
+      "avgLookback": 20
+    },
+    "bigPrints": {
+      "windowMs": 300000,
+      "minCount": 1
+    },
+    "htf": {
+      "timeframe": "15m",
+      "lookbackCandles": 4,
+      "historyCandles": 48,
+      "minHistory": 12,
+      "strongZ": 1.5
+    },
     "risk": {
       "atrTimeframe": "5m",
       "atrPeriod": 14,
@@ -67,6 +148,9 @@
       "minRR": 1.2,
       "rrBasis": "T1"
     },
-    "tracking": { "maxHoldMs": 86400000, "t1Fraction": 0.5 }
+    "tracking": {
+      "maxHoldMs": 86400000,
+      "t1Fraction": 0.5
+    }
   }
 }

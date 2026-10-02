@@ -22,6 +22,13 @@ export function validateConfig(cfg: Config): void {
       errs.push(`assets.${sym}.bigTrade needs minQty and/or minNotionalUsd`);
   }
   for (const tf of cfg.timeframes ?? []) if (!(tf in TF_MS)) errs.push(`unknown timeframe ${tf}`);
+  const fp = cfg.footprint;
+  if (fp?.enabled) {
+    for (const [sym, a] of Object.entries(cfg.assets)) pos(a.footprintBin, `assets.${sym}.footprintBin`);
+    for (const tf of fp.timeframes) if (!cfg.timeframes.includes(tf)) errs.push(`footprint timeframe ${tf} must be listed in timeframes`);
+    if (fp.stackedMin < 2) errs.push('footprint.stackedMin must be >= 2');
+    pos(fp.imbalanceRatio, 'footprint.imbalanceRatio');
+  }
   const s = cfg.signals;
   if (s) {
     pos(s.threshold, 'signals.threshold');

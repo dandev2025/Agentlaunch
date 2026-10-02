@@ -101,4 +101,16 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (underlying, ts)
   ) WITHOUT ROWID;
   `,
+  // 3 — Footprint phase: detected events are logged per run so they can be tuned / audited.
+  `
+  CREATE TABLE footprint_events (
+    id INTEGER PRIMARY KEY,
+    run_id TEXT NOT NULL, ts INTEGER NOT NULL, symbol TEXT NOT NULL, tf TEXT NOT NULL,
+    kind TEXT NOT NULL,                 -- stacked_imbalance | absorption
+    direction TEXT NOT NULL,            -- LONG | SHORT (what it supports)
+    lo REAL NOT NULL, hi REAL NOT NULL,
+    detail TEXT NOT NULL
+  );
+  CREATE INDEX idx_footprint_events ON footprint_events (run_id, symbol, ts);
+  `,
 ];

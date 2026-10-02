@@ -5,7 +5,7 @@ scored LONG/SHORT signals to Telegram**. **There is no order execution anywhere 
 Every alert and signal is logged to SQLite together with the inputs that triggered it, and every
 signal's outcome (stop / T1 / T2, max move for and against) is tracked automatically.
 
-Status: **Phase 1 + 1B built.** Heat map, footprint, GEX, confluence and the Next.js dashboard are
+Status: **Phase 1, 1B and Footprint built.** Heat map, GEX, confluence and the Next.js dashboard are
 later phases (schema is already reserved, see below).
 
 ## Setup
@@ -16,7 +16,7 @@ The only runtime dependency is `ws`. No paid API keys are used or needed.
 ```bash
 npm install
 cp .env.example .env        # optional: add TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
-npm test                    # 52 tests
+npm test                    # 64 tests
 npm run typecheck
 ```
 
@@ -74,6 +74,7 @@ AssetEngine: candles+delta (1m/5m/15m) · big trades · rolling volume profile �
 | `volumeProfile.ts` | rolling window (default 24h), POC, 70% value area (VAH/VAL), HVNs (local maxima ≥ `hvnFactor`× mean bin volume) |
 | `divergence.ts` | CVD divergence vs previous N candles; delta flip; 15m delta z-score |
 | `atr.ts` | Wilder ATR |
+| `footprint.ts` | bid/ask volume per price bin per candle, diagonal stacked imbalance, absorption |
 
 "At or near" a level = within `max(proximity.atrMult × ATR(5m), proximity.minBins × binSize)`
 (percent-of-price until ATR is warm).
@@ -87,6 +88,9 @@ Each 1m close, per asset and direction, conditions earn configurable points:
 | `delta_flip` | delta | 5m candle delta flips positive (size ≥ 0.5× recent avg) | flips negative |
 | `divergence` | delta | bullish CVD divergence (5m/15m) | bearish |
 | `big_prints` | bigtrades | big **buys** at the level outweigh big sells | mirror |
+
+| `fp_stacked_imbalance` | footprint | stacked **buy** imbalance zone at the level | stacked **sell** imbalance |
+| `fp_absorption` | footprint | sell absorption at the lows (aggressive selling absorbed, price closes back up) | buy absorption at the highs |
 
 Delta events stay valid for `conditionTtlMs` (20 min). A signal fires only if **all** hold:
 1. ≥ `minConditions` (3, enforced by config validation) distinct conditions, from ≥ `minFamilies` (2) indicator families
@@ -106,6 +110,20 @@ after `maxHoldMs` and are marked to market. Assumption: entry at the signal pric
 **Report** (`npm run report`): win rate, average R, total R, profit factor, MFE/MAE in R, split by
 direction, asset and **per condition** — including "avg R without this condition" and lift, to guide weight tuning.
 
+### Footprint (`src/indicators/footprint.ts`)
+Per candle (default 5m; `footprint.timeframes`) and per price bin (`assets.*.footprintBin`, finer than the profile bin),
+aggressive buys are recorded as **ask** volume and aggressive sells as **bid** volume.
+- **Imbalance** is diagonal: buy at level *i* if `ask[i] ≥ ratio × bid[i-1]`; sell if `bid[i] ≥ ratio × ask[i+1]`
+  (`imbalanceRatio`, default 3). A level must also hold ≥ `minVolFrac` (2%) of the candle's volume so thin levels are ignored.
+- **Stacked** = ≥ `stackedMin` (3) consecutive same-side imbalances.
+- **Absorption** = in the bottom (or top) `zoneFrac` of the candle's range, the dominant aggressive side has ≥ `minZoneShare`
+  of candle volume and ≥ `dominanceRatio`× the other side, candle volume ≥ `volMult`× its recent average, and price
+  closed back ≥ `rejectFrac` of the range away from the extreme.
+- With `requireAtLevel` (default true) a footprint condition only counts when its zone is at/near the profile level the signal
+  is built on, so imbalances in the middle of nowhere don't add points. Events are logged to `footprint_events`; levels to
+  `footprint_levels` (live only). Inspect real candles with `npm run footprint -- --symbol BTCUSDT --tf 5m --last 3`.
+- No separate footprint alert is sent in this phase; footprint feeds signal scoring only.
+
 ### Config (`config/config.json`)
 Single file, validated on load: assets (enable/disable, `binSize`, big-trade thresholds), timeframes,
 profile settings, alert rules and **cooldowns**, signal weights/threshold/filters/risk/tracking.
@@ -116,8 +134,8 @@ the actual size distribution you see (`big_trades` table) before trusting alerts
 `trades` (symbol, agg_id, ts, price, size, side) · `candles` · `big_trades` · `alerts` (message + JSON inputs) ·
 `signals` (plan, JSON inputs, outcome, MFE/MAE) · `signal_conditions` (one row per fired condition) · `gaps`.
 
-Reserved for later phases (created, unused): `orderbook_snapshots`, `book_walls` (added/pulled/eaten),
-`footprint_levels`, `gex_snapshots`. New signal conditions need no schema change — they are just new
+`footprint_levels` and `footprint_events` are used by the footprint phase. Reserved for later phases (created, unused):
+`orderbook_snapshots`, `book_walls` (added/pulled/eaten), `gex_snapshots`. New signal conditions need no schema change — they are just new
 `signal_conditions.key`/`family` values with weights in config. Migrations live in `src/db/migrations.ts`
 (append-only, tracked by `PRAGMA user_version`); moving to Postgres/Supabase means swapping `src/db/store.ts`.
 
@@ -130,7 +148,7 @@ src/indicators            candles, atr, bigTrades, volumeProfile, divergence
 src/alerts                cooldown, rules, telegram/console notifiers
 src/signals               evaluate (pure scoring+plan), tracker, format
 src/engine                AssetEngine, Pipeline        src/backtest   replay, report, synthetic data
-src/cli                   collect, replay, report, backfill, seed-synthetic     tests/  node:test
+src/cli                   collect, replay, report, backfill, seed-synthetic, footprint     tests/  node:test
 ```
 
 ## Caveats

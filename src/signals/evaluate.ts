@@ -8,6 +8,12 @@ export interface RecentEvent {
   detail?: unknown;
 }
 
+export interface FootprintMemo extends RecentEvent {
+  kind: 'stacked_imbalance' | 'absorption';
+  lo: number;
+  hi: number;
+}
+
 export interface EvalContext {
   symbol: string;
   ts: number;
@@ -18,12 +24,13 @@ export interface EvalContext {
   flips: RecentEvent[]; // delta flips (direction = new sign)
   divergences: RecentEvent[]; // bullish => LONG, bearish => SHORT
   bigTrades: BigTrade[]; // recent window
+  fpEvents?: FootprintMemo[]; // recent footprint detections
   htfZ: number | null;
 }
 
 export interface FiredCondition {
   key: string;
-  family: 'profile' | 'delta' | 'bigtrades';
+  family: 'profile' | 'delta' | 'bigtrades' | 'footprint';
   points: number;
   detail: unknown;
 }
@@ -55,7 +62,12 @@ const SUPPORT_KINDS = ['VAL', 'POC', 'HVN'];
 const RESIST_KINDS = ['VAH', 'POC', 'HVN'];
 
 /** Pure: no clocks, no I/O. Evaluates one direction. */
-export function evaluateDirection(cfg: Config['signals'], ctx: EvalContext, dir: Direction): Evaluation {
+export function evaluateDirection(
+  cfg: Config['signals'],
+  ctx: EvalContext,
+  dir: Direction,
+  fpCfg: Pick<Config['footprint'], 'requireAtLevel'> = { requireAtLevel: true },
+): Evaluation {
   const long = dir === 'LONG';
   const fail = (reason: string, conditions: FiredCondition[] = [], score = 0): Evaluation => ({ ok: false, reason, conditions, score });
   if (!ctx.profile) return fail('no_profile');
@@ -100,6 +112,14 @@ export function evaluateDirection(cfg: Config['signals'], ctx: EvalContext, dir:
         detail: { count: mine.length, notional: sum(mine), opposingNotional: sum(theirs) },
       });
     }
+  }
+
+  // 4) Footprint: stacked imbalance / absorption supporting this direction, at the level when required
+  for (const [kind, key] of [['stacked_imbalance', 'fp_stacked_imbalance'], ['absorption', 'fp_absorption']] as const) {
+    const ev = (ctx.fpEvents ?? []).filter((e) => e.kind === kind && fresh(e)).at(-1);
+    if (!ev) continue;
+    if (fpCfg.requireAtLevel && !(level && level.price >= ev.lo - ctx.near && level.price <= ev.hi + ctx.near)) continue;
+    conditions.push({ key, family: 'footprint', points: w(key), detail: ev.detail });
   }
 
   const score = conditions.reduce((s, c) => s + c.points, 0);
