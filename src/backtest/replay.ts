@@ -4,6 +4,7 @@ import { NullNotifier } from '../alerts/notifier.js';
 import type { Store } from '../db/store.js';
 import { Pipeline } from '../engine/pipeline.js';
 import { WallTimeline } from './wallTimeline.js';
+import { GexTimeline } from './gexTimeline.js';
 
 export interface ReplayOptions {
   runId: string;
@@ -23,6 +24,8 @@ export interface ReplayResult {
   toTs: number;
   /** Number of stored walls available to the replay (0 => heat-map conditions can't fire). */
   walls: number;
+  /** Number of stored GEX snapshots available to the replay (0 => gex_flip can't fire). */
+  gexSnapshots: number;
   perSymbol: Record<string, { trades: number; bigTrades: number; alerts: number; signals: number; rejected: Record<string, number> }>;
 }
 
@@ -40,7 +43,8 @@ export function runReplay(store: Store, cfg: Config, o: ReplayOptions): ReplayRe
   const rs = store.withRun(o.runId);
   const warmFrom = fromTs - (o.warmupMinutes ?? 0) * 60_000;
   const timeline = cfg.heatmap.enabled ? WallTimeline.fromStore(store, symbols, warmFrom, toTs) : undefined;
-  const pipeline = new Pipeline(cfg, { store: rs, notifier: o.notifier ?? new NullNotifier(), persistCandles: false, walls: timeline });
+  const gex = cfg.gex.enabled ? GexTimeline.fromStore(store, cfg, warmFrom, toTs) : undefined;
+  const pipeline = new Pipeline(cfg, { store: rs, notifier: o.notifier ?? new NullNotifier(), persistCandles: false, walls: timeline, gex });
 
   let n = 0;
   rs.db.exec('BEGIN'); // one big transaction makes replay writes fast
@@ -58,5 +62,5 @@ export function runReplay(store: Store, cfg: Config, o: ReplayOptions): ReplayRe
 
   const perSymbol: ReplayResult['perSymbol'] = {};
   for (const [s, e] of pipeline.engines) perSymbol[s] = { ...e.stats };
-  return { runId: o.runId, trades: n, fromTs, toTs, walls: timeline?.size ?? 0, perSymbol };
+  return { runId: o.runId, trades: n, fromTs, toTs, walls: timeline?.size ?? 0, gexSnapshots: gex?.size ?? 0, perSymbol };
 }

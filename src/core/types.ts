@@ -137,3 +137,36 @@ export interface WallEvent {
 export interface WallSource {
   activeWalls(symbol: string, ts: number): WallView[];
 }
+
+// ---- GEX (Deribit options, BTC/ETH only) -----------------------------------------
+export interface GexStrike {
+  strike: number;
+  callGex: number; // dealer dollar-gamma per 1% move, calls (+)
+  putGex: number; // puts (-)
+  gex: number; // net
+  oi: number; // call + put open interest, underlying units
+}
+
+export interface GexSnapshot {
+  underlying: string; // BTC | ETH
+  ts: number;
+  spot: number;
+  /** Price where net GEX changes sign (nearest to spot, within the search grid); null if none found. */
+  flipLevel: number | null;
+  totalGex: number; // net dollar-gamma per 1% move at spot
+  strikes: GexStrike[];
+  instruments: number;
+}
+
+export interface GexView {
+  underlying: string;
+  ts: number;
+  spot: number;
+  flipLevel: number | null;
+  totalGex: number;
+}
+
+export interface GexSource {
+  /** Latest GEX snapshot at or before `ts` for this Binance symbol (null for assets without options data). */
+  gexFor(symbol: string, ts: number): GexView | null;
+}

@@ -128,4 +128,8 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_book_wall_events ON book_wall_events (wall_id, ts);
   `,
+  // 5 — GEX phase: how many instruments fed a snapshot (data-quality check for thin books).
+  `
+  ALTER TABLE gex_snapshots ADD COLUMN instruments INTEGER;
+  `,
 ];

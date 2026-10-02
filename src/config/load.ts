@@ -38,6 +38,17 @@ export function validateConfig(cfg: Config): void {
     if (hm.wall.dropFrac <= 0 || hm.wall.dropFrac >= 1) errs.push('heatmap.wall.dropFrac must be in (0,1)');
     if (hm.wall.holdFrac <= hm.wall.dropFrac || hm.wall.holdFrac > 1) errs.push('heatmap.wall.holdFrac must be in (dropFrac, 1]');
   }
+  const gx = cfg.gex;
+  if (gx?.enabled) {
+    for (const [sym, cur] of Object.entries(gx.underlyings)) {
+      if (!cfg.assets[sym]) errs.push(`gex.underlyings: unknown asset ${sym}`);
+      if (cur !== 'BTC' && cur !== 'ETH') errs.push(`gex.underlyings.${sym}: only BTC and ETH are supported (got ${cur}); SOL options are too thin`);
+    }
+    pos(gx.pollIntervalMs, 'gex.pollIntervalMs');
+    pos(gx.gridStepPct, 'gex.gridStepPct');
+    if (!(gx.gridPct >= gx.gridStepPct)) errs.push('gex.gridPct must be >= gex.gridStepPct');
+    if (gx.maxAgeMs < gx.pollIntervalMs) errs.push('gex.maxAgeMs must be >= gex.pollIntervalMs');
+  }
   const s = cfg.signals;
   if (s) {
     pos(s.threshold, 'signals.threshold');

@@ -5,8 +5,8 @@ scored LONG/SHORT signals to Telegram**. **There is no order execution anywhere 
 Every alert and signal is logged to SQLite together with the inputs that triggered it, and every
 signal's outcome (stop / T1 / T2, max move for and against) is tracked automatically.
 
-Status: **Phase 1, 1B, Footprint and Heat map built.** GEX, the confluence engine and the Next.js dashboard are
-later phases (schema is already reserved, see below).
+Status: **Phase 1, 1B, Footprint, Heat map and GEX built.** The confluence engine and the Next.js dashboard are
+later phases.
 
 ## Setup
 
@@ -16,7 +16,7 @@ The only runtime dependency is `ws`. No paid API keys are used or needed.
 ```bash
 npm install
 cp .env.example .env        # optional: add TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
-npm test                    # 88 tests
+npm test                    # 107 tests
 npm run typecheck
 ```
 
@@ -73,6 +73,7 @@ AssetEngine: candles+delta (1m/5m/15m) · big trades · rolling volume profile �
 | `volumeProfile.ts` | rolling window (default 24h), POC, 70% value area (VAH/VAL), HVNs (local maxima ≥ `hvnFactor`× mean bin volume) |
 | `divergence.ts` | CVD divergence vs previous N candles; delta flip; 15m delta z-score |
 | `atr.ts` | Wilder ATR |
+| `gex.ts` | options gamma exposure from Deribit open interest: per-strike GEX, flip level (BTC/ETH only) |
 | `walls.ts` | resting-wall lifecycle on the L2 book: added / changed / pulled / eaten / expired |
 | `footprint.ts` | bid/ask volume per price bin per candle, diagonal stacked imbalance, absorption |
 
@@ -93,6 +94,8 @@ Each 1m close, per asset and direction, conditions earn configurable points:
 | `fp_absorption` | footprint | sell absorption at the lows (aggressive selling absorbed, price closes back up) | buy absorption at the highs |
 
 | `wall_holding` | heatmap | a bid wall holding just under price at the level | an ask wall holding just over price |
+
+| `gex_flip` | gex | price above the GEX flip level (positive-gamma side), BTC/ETH only | price below the flip level |
 
 Delta events stay valid for `conditionTtlMs` (20 min). A signal fires only if **all** hold:
 1. ≥ `minConditions` (3, enforced by config validation) distinct conditions, from ≥ `minFamilies` (2) indicator families
@@ -146,6 +149,25 @@ aggressive buys are recorded as **ask** volume and aggressive sells as **bid** v
   Size is known at event granularity (changes ≥ `changeFrac`) and `executed` is not reconstructed. Wall alerts are live-only.
   `npm run replay` warns when the range has no stored walls.
 
+### GEX (`src/indicators/gex.ts`, `src/collector/gex.ts`) — BTC and ETH only
+- **Data:** Deribit's public `get_book_summary_by_currency` endpoint — free, **no API key**. It is polled every
+  `pollIntervalMs` (5 min) for BTC and ETH only; SOL options are too thin, and config validation rejects any other currency.
+- **Math:** per option, Black-Scholes gamma on the forward (r = 0) from Deribit's mark IV; GEX = OI × gamma × F² × 0.01
+  (dollars of delta per 1% move), calls **+** and puts **−** (the usual "dealers are long calls / short puts" convention).
+  Options expiring within `minHoursToExpiry` (their 0DTE gamma explodes) or beyond `maxDaysToExpiry` are ignored.
+- **Flip level:** total GEX is re-evaluated with every forward scaled across ±`gridPct` of spot (OI and IV held fixed); the sign
+  change nearest spot, linearly interpolated, is the flip. `null` if none exists in range.
+- **Signal:** `gex_flip` — LONG when price is at least `minDistancePct` above the flip (positive-gamma side: dealer hedging tends to
+  dampen moves), SHORT when at least that far below. A snapshot older than `maxAgeMs` is ignored, as is any asset without GEX data.
+  This is a *regime* condition that is true for one of the two directions most of the time, so it is a weak filter on its own: it
+  can't create a signal by itself, and the per-condition backtest report will show whether it earns its weight.
+- **Replay:** snapshots are stored in `gex_snapshots`; replay uses the latest one at or before each moment (including the one that
+  preceded the window). It warns when the range has none. `npm run gex -- --symbol BTCUSDT` shows the latest stored snapshot with
+  the biggest strikes; `npm run gex -- --live` fetches Deribit right now (stores nothing) to check connectivity and numbers. `/status`
+  shows the flip level and how far price is from it.
+- **Caveats:** GEX is inferred from open interest, not observed dealer positioning, and the sign convention is an assumption.
+  Deribit's index is spot, Binance's price is the perpetual, so there is a small basis. OI changes only a few times a day.
+
 ### Config (`config/config.json`)
 Single file, validated on load: assets (enable/disable, `binSize`, big-trade thresholds), timeframes,
 profile settings, alert rules and **cooldowns**, signal weights/threshold/filters/risk/tracking.
@@ -157,7 +179,7 @@ the actual size distribution you see (`big_trades` table) before trusting alerts
 `signals` (plan, JSON inputs, outcome, MFE/MAE) · `signal_conditions` (one row per fired condition) · `gaps`.
 
 `footprint_levels`/`footprint_events` (footprint) and `orderbook_snapshots`/`book_walls`/`book_wall_events` (heat map) are in use.
-Reserved for a later phase (created, unused): `gex_snapshots`. New signal conditions need no schema change — they are just new
+`gex_snapshots` (GEX) is in use. New signal conditions need no schema change — they are just new
 `signal_conditions.key`/`family` values with weights in config. Migrations live in `src/db/migrations.ts`
 (append-only, tracked by `PRAGMA user_version`); moving to Postgres/Supabase means swapping `src/db/store.ts`.
 
@@ -170,7 +192,7 @@ src/indicators            candles, atr, bigTrades, volumeProfile, divergence
 src/alerts                cooldown, rules, telegram/console notifiers
 src/signals               evaluate (pure scoring+plan), tracker, format
 src/engine                AssetEngine, Pipeline        src/backtest   replay, report, synthetic data
-src/cli                   collect, replay, report, backfill, seed-synthetic, footprint, heatmap     tests/  node:test
+src/cli                   collect, replay, report, backfill, seed-synthetic, footprint, heatmap, gex     tests/  node:test
 ```
 
 ## Caveats
@@ -184,4 +206,6 @@ src/cli                   collect, replay, report, backfill, seed-synthetic, foo
 - The order-book sync and wall tracking are tested against a fake exchange, not the real depth feed. Check `[heatmap]` log lines
   and `npm run heatmap` after a few hours of collecting; `wallMinQty` and `relMult` are untuned placeholders. Depth traffic is
   much heavier than trades alone (three symbols at 500ms).
+- The Deribit client is tested against fakes only (the sandbox could not reach Deribit). Run `npm run gex -- --live` once to confirm the
+  response shape (`instrument_name`, `open_interest`, `mark_iv`, `underlying_price`, `estimated_delivery_price`) and that the numbers look sane.
 - CVD is cumulative since process/replay start, not exchange-session aligned.
