@@ -40,6 +40,8 @@ export interface Config {
     hvnMinSepBins: number;
     hvnSmoothBins: number;
     recomputeMs: number;
+    /** Profile-based alerts and signals are held back until the engine has seen this much trading (the profile is meaningless before). 0 disables. */
+    minWarmupMinutes: number;
   };
   footprint: FootprintOptions & {
     enabled: boolean;

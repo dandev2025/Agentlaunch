@@ -102,7 +102,10 @@ AssetEngine: candles+delta (1m/5m/15m) · big trades · rolling volume profile �
   table and back-filled from REST `aggTrades?fromId=` *before* the live trade is processed. Backfilled
   trades update candles/profile/delta but never fire alerts or signals (they'd be stale).
 - On startup the last `warmupMinutes` of stored trades are replayed silently so ATR, profile and delta
-  history are warm.
+  history are warm. Even so, the volume profile is meaningless until it has seen a stretch of trading (right after a first start it is
+  built from seconds of data), so **profile-based alerts (big trade at POC/HVN, wall events) and all signals are held back until the
+  engine has seen `volumeProfile.minWarmupMinutes` (30) of trading**, warm-up replay included — a restart with stored trades is warm
+  at once. Big trades are still recorded meanwhile. Set it to 0 to disable.
 - The depth stream feeds the heat map (see below); set `heatmap.enabled`/`collector.depth.enabled` to false to run trades-only.
 
 ### Indicators (`src/indicators`, each pure and unit-tested)

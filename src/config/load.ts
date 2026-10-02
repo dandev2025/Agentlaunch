@@ -31,6 +31,7 @@ export function validateConfig(cfg: Config): void {
   }
   if (/\/(ws|stream|market|public|private)(\/|\?|$)/.test(cfg.collector?.wsBaseUrl ?? ''))
     errs.push('collector.wsBaseUrl must be the root (e.g. wss://fstream.binance.com): the collector adds /market and /public itself');
+  if (!(cfg.volumeProfile?.minWarmupMinutes >= 0)) errs.push('volumeProfile.minWarmupMinutes must be >= 0');
   const hm = cfg.heatmap;
   if (hm?.enabled) {
     if (!cfg.collector.depth.enabled) errs.push('heatmap.enabled requires collector.depth.enabled');

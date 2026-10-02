@@ -154,7 +154,7 @@ test('wall alone cannot make a signal', () => {
 
 // ---- alerts ---------------------------------------------------------------------
 test('wall pulled/eaten at a profile level alerts once per cooldown; other events and far walls do not', () => {
-  const cfg = btcOnly();
+  const cfg = btcOnly((c) => { c.volumeProfile.minWarmupMinutes = 0; }); // warm-up gating has its own tests
   const store = new Store(':memory:');
   const notifier = new MemoryNotifier();
   const pipeline = new Pipeline(cfg, { store, notifier });
