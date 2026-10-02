@@ -13,6 +13,7 @@
     "heatmap": "tsx src/cli/heatmap.ts",
     "gex": "tsx src/cli/gex.ts",
     "compare": "tsx src/cli/compare.ts",
+    "tune": "tsx src/cli/tune.ts",
     "backfill": "tsx src/cli/backfill.ts",
     "seed-demo": "tsx src/cli/seed-demo.ts",
     "seed-synthetic": "tsx src/cli/seed-synthetic.ts",
