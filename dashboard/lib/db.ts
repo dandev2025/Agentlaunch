@@ -7,8 +7,12 @@ export type DbState =
   | { ok: true; store: Store; path: string }
   | { ok: false; path: string; reason: 'missing' | 'schema' | 'error'; detail: string };
 
-export function dbPath(): string {
-  return process.env.DB_PATH ?? path.resolve(process.cwd(), '..', 'data', 'orderflow.db');
+/** The dashboard runs from `dashboard/`, so the repo root (where the collector writes `data/`) is one level up. */
+export const repoRoot = (cwd = process.cwd()): string => path.resolve(cwd, '..');
+
+/** `DB_PATH` may be absolute or relative to the repo root (not to `dashboard/`). */
+export function dbPath(cwd = process.cwd(), env: Record<string, string | undefined> = process.env): string {
+  return path.resolve(repoRoot(cwd), env.DB_PATH ?? path.join('data', 'orderflow.db'));
 }
 
 const g = globalThis as unknown as { __dash_store?: { path: string; store: Store } };
