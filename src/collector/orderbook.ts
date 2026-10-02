@@ -74,9 +74,13 @@ export class LocalOrderBook {
 
 /**
  * Keeps a LocalOrderBook in sync using Binance's documented procedure for the futures diff stream:
- *  1. buffer diff events, 2. fetch a REST snapshot, 3. drop events with u < lastUpdateId,
- *  4. the first applied event must satisfy U <= lastUpdateId <= u, 5. every later event must have
- *  pu == previous event's u. Any violation (or a stream reconnect) triggers a fresh snapshot.
+ *  1. buffer diff events, 2. fetch a REST snapshot (lastUpdateId = L), 3. drop events with u < L,
+ *  4. the first applied event must satisfy U <= L <= u, 5. every later event must have pu == the previous event's u.
+ * Any violation (or a stream reconnect) triggers a fresh snapshot.
+ *
+ * Note the first event after a snapshot has pu < L (it started before the snapshot) — the pu chain only applies from the
+ * second event on. Snapshot downloads are throttled (min interval between fetches, exponential backoff after failures)
+ * so a misbehaving feed can never hammer Binance's rate limit.
  */
 export class OrderBookSync {
   readonly book = new LocalOrderBook();
@@ -84,31 +88,68 @@ export class OrderBookSync {
   resyncs = 0;
   private buffer: DepthDiff[] = [];
   private lastU = 0;
+  private snapId = 0;
+  private awaitingFirst = false;
   private blockedUntil = 0;
+  private lastFetchAt = -Infinity;
+  private failures = 0;
+  private lastLogAt = -Infinity;
 
   constructor(
     readonly symbol: string,
     private fetchSnapshot: () => Promise<DepthSnapshot>,
-    private o: { now?: () => number; retryDelayMs?: number; onDesync?: () => void; log?: (m: string) => void } = {},
+    private o: {
+      now?: () => number;
+      /** Base wait after a failed sync; doubles per consecutive failure, capped at 60s. */
+      retryDelayMs?: number;
+      /** Minimum time between snapshot downloads for this symbol. */
+      minResyncIntervalMs?: number;
+      onDesync?: () => void;
+      log?: (m: string) => void;
+    } = {},
   ) {}
 
   private now = () => (this.o.now ?? Date.now)();
 
+  private log(m: string): void {
+    const t = this.now();
+    if (t - this.lastLogAt < 10_000) return; // don't flood the console if something is persistently wrong
+    this.lastLogAt = t;
+    this.o.log?.(m);
+  }
+
   onDiff(d: DepthDiff): void {
     if (this.state === 'live') {
-      if (d.pu !== this.lastU) {
-        this.o.log?.(`${this.symbol} depth gap (pu ${d.pu} != ${this.lastU}) — resyncing`);
+      const r = this.applyLive(d);
+      if (r === 'gap') {
+        this.log(`${this.symbol} depth gap (event ${d.U}..${d.u} pu ${d.pu}, expected pu ${this.lastU}) — resyncing`);
         this.desync();
         this.buffer.push(d);
-        void this.resync();
-        return;
+        this.maybeResync();
       }
-      this.book.apply(d);
-      this.lastU = d.u;
       return;
     }
     if (this.buffer.length < 20_000) this.buffer.push(d);
-    if (this.state === 'init' && this.now() >= this.blockedUntil) void this.resync();
+    if (this.state === 'init') this.maybeResync();
+  }
+
+  /** Apply one event to a live book. 'stale' events (older than the snapshot) are ignored; a 'gap' means events were missed. */
+  private applyLive(d: DepthDiff): 'ok' | 'stale' | 'gap' {
+    if (this.awaitingFirst) {
+      if (d.u < this.snapId) return 'stale';
+      if (d.U > this.snapId) return 'gap'; // we missed events between the snapshot and this one
+      this.awaitingFirst = false; // U <= L <= u: the first event that spans the snapshot
+    } else if (d.pu !== this.lastU) {
+      return 'gap';
+    }
+    this.book.apply(d);
+    this.lastU = d.u;
+    return 'ok';
+  }
+
+  private maybeResync(): void {
+    const earliest = Math.max(this.blockedUntil, this.lastFetchAt + (this.o.minResyncIntervalMs ?? 5000));
+    if (this.now() >= earliest) void this.resync();
   }
 
   /** Call when the underlying stream reconnects: whatever we missed makes the book untrustworthy. */
@@ -120,6 +161,7 @@ export class OrderBookSync {
   private desync(): void {
     const was = this.state === 'live';
     this.state = 'init';
+    this.awaitingFirst = false;
     if (was) this.o.onDesync?.();
   }
 
@@ -127,27 +169,27 @@ export class OrderBookSync {
     if (this.state === 'syncing') return;
     this.state = 'syncing';
     this.resyncs++;
+    this.lastFetchAt = this.now();
     try {
       const snap = await this.fetchSnapshot();
       this.book.load(snap);
-      const lid = snap.lastUpdateId;
-      const events = this.buffer.filter((e) => e.u >= lid);
+      this.snapId = snap.lastUpdateId;
+      this.lastU = snap.lastUpdateId;
+      this.awaitingFirst = true;
+      const pending = this.buffer;
       this.buffer = [];
-      let prevU = -1;
-      for (let i = 0; i < events.length; i++) {
-        const e = events[i];
-        if (i === 0 && !(e.U <= lid && e.u >= lid)) throw new Error(`first event ${e.U}..${e.u} does not cover snapshot ${lid}`);
-        if (i > 0 && e.pu !== prevU) throw new Error(`event chain broken at ${e.U} (pu ${e.pu} != ${prevU})`);
-        this.book.apply(e);
-        prevU = e.u;
+      for (const e of pending) {
+        if (this.applyLive(e) === 'gap') throw new Error(`buffered event ${e.U}..${e.u} (pu ${e.pu}) does not follow snapshot ${snap.lastUpdateId}`);
       }
-      this.lastU = events.length ? prevU : lid;
       this.state = 'live';
+      this.failures = 0;
     } catch (err) {
-      this.o.log?.(`${this.symbol} order book sync failed: ${(err as Error).message}`);
+      this.log(`${this.symbol} order book sync failed: ${(err as Error).message}`);
       this.state = 'init';
+      this.awaitingFirst = false;
       this.buffer = [];
-      this.blockedUntil = this.now() + (this.o.retryDelayMs ?? 5000);
+      this.failures++;
+      this.blockedUntil = this.now() + Math.min(60_000, (this.o.retryDelayMs ?? 5000) * 2 ** (this.failures - 1));
     }
   }
 }
