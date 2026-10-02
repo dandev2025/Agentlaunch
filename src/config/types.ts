@@ -1,9 +1,12 @@
 import type { LevelKind, Timeframe } from '../core/types.js';
+import type { FootprintOptions } from '../indicators/footprint.js';
 
 export interface AssetConfig {
   enabled: boolean;
   /** Volume-profile price bin (quote currency). */
   binSize: number;
+  /** Footprint price bin (finer than the profile bin). */
+  footprintBin: number;
   /** A trade is "big" if size >= minQty OR notional >= minNotionalUsd (whichever is set). */
   bigTrade: { minQty: number | null; minNotionalUsd: number | null };
 }
@@ -33,6 +36,14 @@ export interface Config {
     hvnMinSepBins: number;
     hvnSmoothBins: number;
     recomputeMs: number;
+  };
+  footprint: FootprintOptions & {
+    enabled: boolean;
+    timeframes: Timeframe[];
+    /** Store footprint levels in `footprint_levels` (live only). */
+    persist: boolean;
+    /** Footprint conditions only count when the event zone is at/near the level the signal is built on. */
+    requireAtLevel: boolean;
   };
   alerts: {
     maxAgeMs: number;

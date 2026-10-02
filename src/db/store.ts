@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { BigTrade, Candle, Direction, Trade } from '../core/types.js';
+import type { BigTrade, Candle, Direction, FootprintCandle, FootprintEvent, Trade } from '../core/types.js';
 import { MIGRATIONS } from './migrations.js';
 
 export interface SignalRow {
@@ -165,6 +165,21 @@ export class Store {
       `INSERT OR REPLACE INTO candles (symbol, tf, ts, open, high, low, close, volume, buy_volume, sell_volume, delta, cvd, trades)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(c.symbol, c.tf, c.ts, c.open, c.high, c.low, c.close, c.volume, c.buyVolume, c.sellVolume, c.delta, c.cvd, c.trades);
+  }
+
+  recordFootprint(fc: FootprintCandle): void {
+    const s = this.st(
+      'INSERT OR REPLACE INTO footprint_levels (symbol, tf, ts, price, bid_volume, ask_volume, trades) VALUES (?,?,?,?,?,?,?)',
+    );
+    this.tx(() => {
+      for (const l of fc.levels) s.run(fc.symbol, fc.tf, fc.ts, l.price, l.bid, l.ask, l.trades);
+    });
+  }
+
+  recordFootprintEvent(e: FootprintEvent): void {
+    this.st(
+      'INSERT INTO footprint_events (run_id, ts, symbol, tf, kind, direction, lo, hi, detail) VALUES (?,?,?,?,?,?,?,?,?)',
+    ).run(this.runId, e.ts, e.symbol, e.tf, e.kind, e.direction, e.lo, e.hi, JSON.stringify(e.detail));
   }
 
   recordBigTrade(b: BigTrade): void {

@@ -9,6 +9,7 @@
     "collect": "tsx src/cli/collect.ts",
     "replay": "tsx src/cli/replay.ts",
     "report": "tsx src/cli/report.ts",
+    "footprint": "tsx src/cli/footprint.ts",
     "backfill": "tsx src/cli/backfill.ts",
     "seed-synthetic": "tsx src/cli/seed-synthetic.ts",
     "typecheck": "tsc --noEmit",
