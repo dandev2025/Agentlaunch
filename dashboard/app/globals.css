@@ -59,3 +59,9 @@ details summary { cursor: pointer; color: var(--accent); font-size: 12px; }
 .fp .bidc span.bar { right: 0; background: var(--down); } .fp .askc span.bar { left: 0; background: var(--up); } .fp .askc { text-align: left; }
 .fp .mk { font-weight: 700; } .fp .mk.b { color: var(--up); } .fp .mk.s { color: var(--down); }
 @media (max-width: 640px) { h1 { font-size: 18px; } th, td { padding: 6px 8px; } }
+.l-poc { stroke: var(--accent); } .l-gex { stroke: #b07cff; } .l-cvd { stroke: var(--accent); }
+.w-bid { stroke: var(--up); } .w-ask { stroke: var(--down); }
+.bt-buy { fill: var(--up); } .bt-sell { fill: var(--down); }
+.fp-long line { stroke: var(--up); } .fp-short line { stroke: var(--down); }
+.sig-long { fill: var(--up); stroke: var(--chart-bg); } .sig-short { fill: var(--down); stroke: var(--chart-bg); }
+.checks { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; } .checks label { display: inline-flex; gap: 5px; align-items: center; flex-direction: row; }

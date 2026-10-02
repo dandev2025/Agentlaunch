@@ -243,3 +243,14 @@ test('fmtDollar: dollar sign, thousands separators, decimals scaled to the price
   assert.equal(fmtDollar(0.5), '$0.50000');
   assert.equal(fmtDollar(1234567.89), '$1,234,567.9');
 });
+
+test('chart data: candles, profile levels, walls, GEX flip and markers are anchored on the latest candle', () => {
+  const c = q.chartData(ro, cfg, 'BTCUSDT', '5m', 2, 'live', Date.now());
+  assert.ok(c.candles.length > 0 && c.candles.length <= 2 * 12 + 1);
+  assert.equal(c.toTs, c.candles.at(-1)!.ts + 300_000);
+  assert.ok(c.profile && c.profile.val <= c.profile.poc && c.profile.poc <= c.profile.vah);
+  assert.ok(c.walls.some((w) => w.status === 'pulled' && w.price === 64990));
+  assert.ok(c.gexFlip.every((g) => g.ts >= c.fromTs && g.ts <= c.toTs));
+  assert.ok(c.signals.every((x) => x.ts >= c.fromTs && x.ts <= c.toTs));
+  assert.equal(q.chartData(ro, cfg, 'SOLUSDT', '1m', 1, 'nope').signals.length, 0);
+});

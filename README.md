@@ -69,6 +69,7 @@ Run it next to `npm run collect`; pages re-read the database every 10–60 s. Pa
 | Footprint | bid × ask ladders per candle with imbalance marks, stacked imbalances and absorption (same rules as the signal engine) |
 | GEX | per-strike gamma exposure, spot and flip level, flip history (BTC/ETH) |
 | Profile | volume profile with POC / value area / HVNs rebuilt from stored trades |
+| Chart | candles (1m/5m/15m) with switchable overlays: volume-profile levels, book walls, GEX flip, big trades, footprint absorption/stacked marks, signals, plus a delta / CVD pane |
 
 Settings (environment variables): `DB_PATH` (default `data/orderflow.db`) and `CONFIG_PATH` (default `config/config.json`, the same file
 the collector uses) — relative paths are relative to the **repo root**, absolute paths work too; `PORT` (default 3000), and optionally `DASHBOARD_PASSWORD` (+ `DASHBOARD_USER`,

@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 
 const LINKS = [
   ['/', 'Overview'], ['/signals', 'Signals'], ['/alerts', 'Alerts'], ['/performance', 'Performance'],
-  ['/heatmap', 'Heat map'], ['/footprint', 'Footprint'], ['/gex', 'GEX'], ['/profile', 'Profile'],
+  ['/heatmap', 'Heat map'], ['/footprint', 'Footprint'], ['/gex', 'GEX'], ['/profile', 'Profile'], ['/chart', 'Chart'],
 ] as const;
 
 export function Nav() {

@@ -329,3 +329,43 @@ export function profile(s: Store, cfg: Config, symbol: string, hours: number, no
   }
   return { snapshot: n ? vp.snapshot(lastTs) : null, bins: n ? vp.histogram(lastTs) : [], trades: n, lastPrice: last, hours };
 }
+
+// ---- combined chart ---------------------------------------------------------------------------
+export interface ChartData {
+  symbol: string;
+  tf: Timeframe;
+  fromTs: number;
+  toTs: number;
+  candles: Candle[];
+  profile: { poc: number; vah: number; val: number; hvns: number[] } | null;
+  walls: { side: string; price: number; firstSeen: number; lastSeen: number; status: string; peak: number }[];
+  gexFlip: { ts: number; flip: number }[];
+  bigTrades: { ts: number; price: number; notional: number; side: number }[];
+  footprint: { ts: number; kind: string; direction: string; lo: number; hi: number }[];
+  signals: { id: number; ts: number; direction: 'LONG' | 'SHORT'; entry: number; score: number }[];
+}
+
+/** Everything the /chart page overlays on the candles. Anchored on the latest stored candle so old or demo data still shows. */
+export function chartData(s: Store, cfg: Config, symbol: string, tf: Timeframe, hours: number, run = LIVE_RUN, now = Date.now()): ChartData {
+  const latest = one(s, 'SELECT MAX(ts) t FROM candles WHERE symbol = ? AND tf = ?', symbol, tf)?.t ?? one(s, 'SELECT MAX(ts) t FROM trades WHERE symbol = ?', symbol)?.t ?? null;
+  const toTs = latest != null ? Math.min(now, latest + TF_MS[tf]) : now;
+  const fromTs = toTs - hours * 3_600_000;
+  const candles = candlesFor(s, symbol, fromTs, toTs, tf);
+  const p = candles.length ? profile(s, cfg, symbol, 24, toTs) : null;
+  const walls = all(s, 'SELECT side, price, first_seen, last_seen, status, peak_size FROM book_walls WHERE symbol = ? AND last_seen >= ? AND first_seen <= ? ORDER BY first_seen', symbol, fromTs, toTs)
+    .map((w) => ({ side: w.side, price: w.price, firstSeen: w.first_seen, lastSeen: w.status === 'active' ? toTs : w.last_seen, status: w.status, peak: w.peak_size }));
+  const underlying = (cfg.gex.underlyings as Record<string, string>)[symbol];
+  const gexFlip = underlying
+    ? all(s, 'SELECT ts, flip_level FROM gex_snapshots WHERE underlying = ? AND ts >= ? AND ts <= ? AND flip_level IS NOT NULL ORDER BY ts', underlying, fromTs, toTs).map((r) => ({ ts: r.ts, flip: r.flip_level }))
+    : [];
+  const bigTrades = all(s, 'SELECT ts, price, notional, side FROM big_trades WHERE run_id = ? AND symbol = ? AND ts >= ? AND ts <= ? ORDER BY ts LIMIT 2000', run, symbol, fromTs, toTs)
+    .map((r) => ({ ts: r.ts, price: r.price, notional: r.notional, side: r.side }));
+  const footprint = all(s, 'SELECT ts, kind, direction, lo, hi FROM footprint_events WHERE run_id = ? AND symbol = ? AND ts >= ? AND ts <= ? ORDER BY ts', run, symbol, fromTs, toTs);
+  const signals = all(s, 'SELECT id, ts, direction, entry, score FROM signals WHERE run_id = ? AND symbol = ? AND ts >= ? AND ts <= ? ORDER BY ts', run, symbol, fromTs, toTs)
+    .map((r) => ({ id: r.id, ts: r.ts, direction: r.direction, entry: r.entry, score: r.score }));
+  return {
+    symbol, tf, fromTs, toTs, candles,
+    profile: p?.snapshot ? { poc: p.snapshot.poc, vah: p.snapshot.vah, val: p.snapshot.val, hvns: p.snapshot.hvns.map((h) => h.price) } : null,
+    walls, gexFlip, bigTrades, footprint: footprint as ChartData['footprint'], signals,
+  };
+}
