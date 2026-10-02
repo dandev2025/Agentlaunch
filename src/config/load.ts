@@ -1,0 +1,37 @@
+import { readFileSync } from 'node:fs';
+import type { Config } from './types.js';
+import { TF_MS } from '../core/types.js';
+
+export const DEFAULT_CONFIG_PATH = 'config/config.json';
+
+export function loadConfig(path = process.env.CONFIG_PATH ?? DEFAULT_CONFIG_PATH): Config {
+  const cfg = JSON.parse(readFileSync(path, 'utf8')) as Config;
+  validateConfig(cfg);
+  return cfg;
+}
+
+export function validateConfig(cfg: Config): void {
+  const errs: string[] = [];
+  const pos = (v: unknown, name: string) => {
+    if (typeof v !== 'number' || !(v > 0)) errs.push(`${name} must be a positive number`);
+  };
+  if (!Object.keys(cfg.assets ?? {}).length) errs.push('assets must not be empty');
+  for (const [sym, a] of Object.entries(cfg.assets ?? {})) {
+    pos(a.binSize, `assets.${sym}.binSize`);
+    if (a.bigTrade?.minQty == null && a.bigTrade?.minNotionalUsd == null)
+      errs.push(`assets.${sym}.bigTrade needs minQty and/or minNotionalUsd`);
+  }
+  for (const tf of cfg.timeframes ?? []) if (!(tf in TF_MS)) errs.push(`unknown timeframe ${tf}`);
+  const s = cfg.signals;
+  if (s) {
+    pos(s.threshold, 'signals.threshold');
+    if (s.minConditions < 3) errs.push('signals.minConditions must be >= 3 (single-indicator signals are not allowed)');
+    if (s.minFamilies < 1) errs.push('signals.minFamilies must be >= 1');
+    for (const tf of [s.deltaFlip.timeframe, s.htf.timeframe, s.risk.atrTimeframe])
+      if (!cfg.timeframes.includes(tf)) errs.push(`timeframe ${tf} used by signals must be listed in timeframes`);
+    if (s.tracking.t1Fraction < 0 || s.tracking.t1Fraction > 1) errs.push('signals.tracking.t1Fraction must be in [0,1]');
+  }
+  for (const tf of cfg.alerts?.deltaDivergence?.timeframes ?? [])
+    if (!cfg.timeframes.includes(tf)) errs.push(`alerts.deltaDivergence timeframe ${tf} must be listed in timeframes`);
+  if (errs.length) throw new Error(`Invalid config:\n - ${errs.join('\n - ')}`);
+}

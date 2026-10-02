@@ -1,0 +1,72 @@
+{
+  "dbPath": "data/orderflow.db",
+  "assets": {
+    "BTCUSDT": { "enabled": true, "binSize": 10,   "bigTrade": { "minQty": 3,    "minNotionalUsd": null } },
+    "ETHUSDT": { "enabled": true, "binSize": 0.5,  "bigTrade": { "minQty": 80,   "minNotionalUsd": null } },
+    "SOLUSDT": { "enabled": true, "binSize": 0.05, "bigTrade": { "minQty": 2000, "minNotionalUsd": null } }
+  },
+  "timeframes": ["1m", "5m", "15m"],
+  "collector": {
+    "wsBaseUrl": "wss://fstream.binance.com",
+    "restBaseUrl": "https://fapi.binance.com",
+    "depth": { "enabled": false, "levels": 20, "speedMs": 100 },
+    "pingIntervalMs": 15000,
+    "staleAfterMs": 30000,
+    "reconnectMinDelayMs": 1000,
+    "reconnectMaxDelayMs": 30000,
+    "flushIntervalMs": 500,
+    "backfillOnGap": true,
+    "maxBackfillTrades": 50000,
+    "warmupMinutes": 120
+  },
+  "proximity": { "atrMult": 0.5, "minBins": 2, "fallbackPct": 0.0005 },
+  "volumeProfile": {
+    "windowMinutes": 1440,
+    "valueAreaPct": 0.7,
+    "hvnFactor": 1.5,
+    "hvnMinSepBins": 3,
+    "hvnSmoothBins": 1,
+    "recomputeMs": 5000
+  },
+  "alerts": {
+    "maxAgeMs": 60000,
+    "bigTradeAtLevel": { "enabled": true, "levels": ["POC", "HVN"], "cooldownMs": 120000 },
+    "deltaDivergence": {
+      "enabled": true,
+      "timeframes": ["5m", "15m"],
+      "lookbackCandles": 12,
+      "cooldownMs": 900000
+    }
+  },
+  "signals": {
+    "enabled": true,
+    "threshold": 60,
+    "minConditions": 3,
+    "minFamilies": 2,
+    "cooldownMs": 1800000,
+    "conditionTtlMs": 1200000,
+    "weights": {
+      "level:VAL": 25,
+      "level:VAH": 25,
+      "level:POC": 20,
+      "level:HVN": 18,
+      "delta_flip": 20,
+      "divergence": 25,
+      "big_prints": 25
+    },
+    "deltaFlip": { "timeframe": "5m", "minMultOfAvg": 0.5, "avgLookback": 20 },
+    "bigPrints": { "windowMs": 300000, "minCount": 1 },
+    "htf": { "timeframe": "15m", "lookbackCandles": 4, "historyCandles": 48, "minHistory": 12, "strongZ": 1.5 },
+    "risk": {
+      "atrTimeframe": "5m",
+      "atrPeriod": 14,
+      "stopAtrMult": 1.0,
+      "entryZoneAtr": 0.25,
+      "minTargetAtr": 0.5,
+      "fallbackT2Atr": 1.0,
+      "minRR": 1.2,
+      "rrBasis": "T1"
+    },
+    "tracking": { "maxHoldMs": 86400000, "t1Fraction": 0.5 }
+  }
+}
