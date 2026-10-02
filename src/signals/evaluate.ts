@@ -1,5 +1,5 @@
 import type { Config } from '../config/types.js';
-import type { BigTrade, Direction, Level, ProfileSnapshot, WallView } from '../core/types.js';
+import type { BigTrade, Direction, Level, GexView, ProfileSnapshot, WallView } from '../core/types.js';
 import { profileLevels } from '../alerts/rules.js';
 
 export interface RecentEvent {
@@ -26,12 +26,13 @@ export interface EvalContext {
   bigTrades: BigTrade[]; // recent window
   fpEvents?: FootprintMemo[]; // recent footprint detections
   walls?: WallView[]; // resting walls standing right now (heat map)
+  gex?: GexView | null; // latest options GEX snapshot (BTC/ETH only)
   htfZ: number | null;
 }
 
 export interface FiredCondition {
   key: string;
-  family: 'profile' | 'delta' | 'bigtrades' | 'footprint' | 'heatmap';
+  family: 'profile' | 'delta' | 'bigtrades' | 'footprint' | 'heatmap' | 'gex';
   points: number;
   detail: unknown;
 }
@@ -69,6 +70,7 @@ export function evaluateDirection(
   dir: Direction,
   fpCfg: Pick<Config['footprint'], 'requireAtLevel'> = { requireAtLevel: true },
   heat: Pick<Config['heatmap'], 'requireAtLevel'> & Pick<Config['heatmap']['wall'], 'minAgeMs' | 'holdFrac'> = { requireAtLevel: true, minAgeMs: 30_000, holdFrac: 0.7 },
+  gexCfg: Pick<Config['gex'], 'maxAgeMs' | 'minDistancePct'> = { maxAgeMs: 1_800_000, minDistancePct: 0.001 },
 ): Evaluation {
   const long = dir === 'LONG';
   const fail = (reason: string, conditions: FiredCondition[] = [], score = 0): Evaluation => ({ ok: false, reason, conditions, score });
@@ -141,6 +143,21 @@ export function evaluateDirection(
       conditions.push({
         key: 'wall_holding', family: 'heatmap', points: w('wall_holding'),
         detail: { side: holding.side, price: holding.price, size: holding.size, peak: holding.peak, ageMs: ctx.ts - holding.firstSeen, executed: holding.executed },
+      });
+    }
+  }
+
+  // 6) GEX regime (BTC/ETH only): LONG above the flip level (positive-gamma side), SHORT below it
+  if (ctx.gex?.flipLevel != null && ctx.ts - ctx.gex.ts <= gexCfg.maxAgeMs) {
+    const flip = ctx.gex.flipLevel;
+    const dist = (ctx.price - flip) / flip; // > 0: above the flip
+    if ((long ? dist : -dist) >= gexCfg.minDistancePct) {
+      conditions.push({
+        key: 'gex_flip', family: 'gex', points: w('gex_flip'),
+        detail: {
+          flipLevel: flip, distancePct: dist, totalGex: ctx.gex.totalGex, snapshotAgeMs: ctx.ts - ctx.gex.ts,
+          regime: dist > 0 ? 'above_flip' : 'below_flip',
+        },
       });
     }
   }

@@ -106,6 +106,22 @@
     },
     "requireAtLevel": true
   },
+  "gex": {
+    "enabled": true,
+    "baseUrl": "https://www.deribit.com",
+    "pollIntervalMs": 300000,
+    "underlyings": {
+      "BTCUSDT": "BTC",
+      "ETHUSDT": "ETH"
+    },
+    "minHoursToExpiry": 2,
+    "maxDaysToExpiry": 60,
+    "gridPct": 0.3,
+    "gridStepPct": 0.005,
+    "persist": true,
+    "maxAgeMs": 1800000,
+    "minDistancePct": 0.001
+  },
   "alerts": {
     "maxAgeMs": 60000,
     "bigTradeAtLevel": {
@@ -157,7 +173,8 @@
       "big_prints": 25,
       "fp_stacked_imbalance": 20,
       "fp_absorption": 25,
-      "wall_holding": 20
+      "wall_holding": 20,
+      "gex_flip": 15
     },
     "deltaFlip": {
       "timeframe": "5m",

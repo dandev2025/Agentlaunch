@@ -71,6 +71,23 @@ export interface Config {
     /** Wall condition only counts when the wall sits at/near the profile level the signal is built on. */
     requireAtLevel: boolean;
   };
+  /** Deribit options GEX. Only BTC and ETH: SOL options are too thin to say anything. */
+  gex: {
+    enabled: boolean;
+    baseUrl: string;
+    pollIntervalMs: number;
+    /** Binance symbol -> Deribit currency (BTC | ETH). */
+    underlyings: Record<string, 'BTC' | 'ETH'>;
+    minHoursToExpiry: number;
+    maxDaysToExpiry: number;
+    gridPct: number;
+    gridStepPct: number;
+    persist: boolean;
+    /** Signals ignore a snapshot older than this. */
+    maxAgeMs: number;
+    /** Price must be at least this fraction beyond the flip level for the condition to count. */
+    minDistancePct: number;
+  };
   alerts: {
     maxAgeMs: number;
     bigTradeAtLevel: { enabled: boolean; levels: LevelKind[]; cooldownMs: number };

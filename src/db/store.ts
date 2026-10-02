@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { BigTrade, Candle, Direction, FootprintCandle, FootprintEvent, Trade, WallEventType, WallSide } from '../core/types.js';
+import type { BigTrade, Candle, Direction, FootprintCandle, FootprintEvent, GexSnapshot, Trade, WallEventType, WallSide } from '../core/types.js';
 import { MIGRATIONS } from './migrations.js';
 
 export interface SignalRow {
@@ -193,6 +193,37 @@ export class Store {
     this.st(
       'INSERT INTO footprint_events (run_id, ts, symbol, tf, kind, direction, lo, hi, detail) VALUES (?,?,?,?,?,?,?,?,?)',
     ).run(this.runId, e.ts, e.symbol, e.tf, e.kind, e.direction, e.lo, e.hi, JSON.stringify(e.detail));
+  }
+
+  // ---- GEX ----------------------------------------------------------------
+  insertGexSnapshot(g: GexSnapshot): void {
+    this.st(
+      `INSERT OR REPLACE INTO gex_snapshots (underlying, ts, spot, flip_level, total_gex, strikes, instruments)
+       VALUES (?,?,?,?,?,?,?)`,
+    ).run(g.underlying, g.ts, g.spot, g.flipLevel, g.totalGex, JSON.stringify(g.strikes), g.instruments);
+  }
+
+  /** Snapshots for the given underlyings in [fromTs, toTs], oldest first. `withStrikes` pulls the JSON breakdown too. */
+  loadGexSnapshots(underlyings: string[], fromTs: number, toTs: number, withStrikes = false): GexSnapshot[] {
+    const ph = underlyings.map(() => '?').join(',');
+    const rows = this.db
+      .prepare(
+        `SELECT underlying, ts, spot, flip_level, total_gex, instruments ${withStrikes ? ', strikes' : ''} FROM gex_snapshots
+         WHERE underlying IN (${ph}) AND ts >= ? AND ts <= ? ORDER BY ts`,
+      )
+      .all(...underlyings, fromTs, toTs) as Record<string, any>[];
+    return rows.map((r) => ({
+      underlying: r.underlying, ts: r.ts, spot: r.spot, flipLevel: r.flip_level, totalGex: r.total_gex,
+      strikes: withStrikes && r.strikes ? JSON.parse(r.strikes) : [], instruments: r.instruments ?? 0,
+    }));
+  }
+
+  /** Latest snapshot at or before `ts` (used to warm replay with the snapshot that preceded its window). */
+  latestGexBefore(underlying: string, ts: number): GexSnapshot | null {
+    const r = this.db
+      .prepare('SELECT ts FROM gex_snapshots WHERE underlying = ? AND ts <= ? ORDER BY ts DESC LIMIT 1')
+      .get(underlying, ts) as { ts: number } | undefined;
+    return r ? this.loadGexSnapshots([underlying], r.ts, r.ts)[0] : null;
   }
 
   // ---- heat map -----------------------------------------------------------

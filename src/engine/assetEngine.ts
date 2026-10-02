@@ -1,5 +1,5 @@
 import type { Config } from '../config/types.js';
-import { TF_MS, type Candle, type Direction, type FootprintCandle, type Timeframe, type Trade, type WallEvent, type WallSource } from '../core/types.js';
+import { TF_MS, type Candle, type Direction, type FootprintCandle, type Timeframe, type Trade, type GexSource, type WallEvent, type WallSource } from '../core/types.js';
 import type { Store } from '../db/store.js';
 import { Cooldown } from '../alerts/cooldown.js';
 import type { Notifier } from '../alerts/notifier.js';
@@ -21,6 +21,8 @@ export interface EngineDeps {
   persistCandles?: boolean;
   /** Source of standing walls: the live heat-map service, or a replay timeline built from stored walls. */
   walls?: WallSource;
+  /** Source of options GEX: the live Deribit poller, or a replay timeline of stored snapshots. */
+  gex?: GexSource;
   log?: (msg: string) => void;
 }
 
@@ -205,13 +207,14 @@ export class AssetEngine {
       symbol: this.symbol, ts: now, price, atr: this.atr.value, near: this.nearDistance(price),
       profile: this.snapshot(now), flips: this.flips, divergences: this.divs, fpEvents: this.fpEvents,
       walls: this.deps.walls?.activeWalls(this.symbol, now),
+      gex: this.deps.gex?.gexFor(this.symbol, now),
       bigTrades: this.bigBuf.recent(now),
       htfZ: htfDeltaZ(htfHist, sc.htf.lookbackCandles, sc.htf.historyCandles, sc.htf.minHistory),
     };
     for (const dir of ['LONG', 'SHORT'] as const) {
       const ev = evaluateDirection(sc, ctx, dir, this.cfg.footprint, {
         requireAtLevel: this.cfg.heatmap.requireAtLevel, minAgeMs: this.cfg.heatmap.wall.minAgeMs, holdFrac: this.cfg.heatmap.wall.holdFrac,
-      });
+      }, this.cfg.gex);
       if (!ev.ok) {
         // Count only near-misses (at least 2 conditions) to keep the stats meaningful.
         if (ev.conditions.length >= 2) this.stats.rejected[ev.reason] = (this.stats.rejected[ev.reason] ?? 0) + 1;
