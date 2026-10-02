@@ -14,9 +14,15 @@
     "gex": "tsx src/cli/gex.ts",
     "compare": "tsx src/cli/compare.ts",
     "backfill": "tsx src/cli/backfill.ts",
+    "seed-demo": "tsx src/cli/seed-demo.ts",
     "seed-synthetic": "tsx src/cli/seed-synthetic.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test \"tests/**/*.test.ts\""
+    "test": "node --import tsx --test \"tests/**/*.test.ts\" \"dashboard/tests/**/*.test.ts\"",
+    "dashboard:install": "npm install --prefix dashboard",
+    "dashboard": "npm run dev --prefix dashboard",
+    "dashboard:build": "npm run build --prefix dashboard",
+    "dashboard:typecheck": "npm run typecheck --prefix dashboard",
+    "dashboard:start": "npm run start --prefix dashboard"
   },
   "dependencies": {
     "ws": "^8.18.0"

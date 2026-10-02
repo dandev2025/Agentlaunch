@@ -5,8 +5,7 @@ scored LONG/SHORT signals to Telegram**. **There is no order execution anywhere 
 Every alert and signal is logged to SQLite together with the inputs that triggered it, and every
 signal's outcome (stop / T1 / T2, max move for and against) is tracked automatically.
 
-Status: **Phase 1, 1B, Footprint, Heat map, GEX and the confluence engine built.** The Next.js dashboard is the
-remaining phase.
+Status: **all phases built:** Phase 1, 1B, footprint, heat map, GEX, confluence engine and the Next.js dashboard.
 
 ## Setup
 
@@ -16,7 +15,7 @@ The only runtime dependency is `ws`. No paid API keys are used or needed.
 ```bash
 npm install
 cp .env.example .env        # optional: add TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
-npm test                    # 123 tests
+npm test                    # 136 tests (incl. the dashboard's data layer)
 npm run typecheck
 ```
 
@@ -44,6 +43,41 @@ npm run report -- --run bt1 [--json] [--symbol ETHUSDT]   # `--run live` for liv
 Replay uses the *same* engine code as live, with trade timestamps as the clock, and writes results
 under its own `run_id`, so you can compare weight sets side by side. It never sends Telegram
 messages unless you pass `--telegram`. Use `--db other.db` on any command to work on a different file.
+
+## Dashboard (read-only)
+
+A Next.js app in `dashboard/` that reads the collector's SQLite file. It is **read-only**: it opens the database in read-only mode
+(it cannot write, create or migrate it, so it can't interfere with the collector) and has no way to place orders.
+
+```bash
+npm run dashboard:install                      # once (the dashboard has its own node_modules)
+npm run dashboard                              # dev server, http://localhost:3000
+npm run dashboard:build && npm run dashboard:start   # production
+npm run seed-demo                              # optional: a complete demo DB of SYNTHETIC data -> data/demo.db
+DB_PATH=data/demo.db npm run dashboard         # look at the demo data
+```
+
+Run it next to `npm run collect`; pages re-read the database every 10–60 s. Pages:
+
+| Page | What it shows |
+|---|---|
+| Overview | per-asset health (last trade age, trades/5m), open signals, recent signals and alerts, 24h counts, data gaps, GEX flip |
+| Signals / signal detail | filterable list (live or any backtest run); per signal: candle chart with entry zone, stop, targets and profile levels, the conditions that fired with their inputs, confluence breakdown, outcome and MFE/MAE |
+| Alerts | what was sent to Telegram (or would have been, for backtests), with the inputs that triggered it |
+| Performance | the backtest report in the browser: per condition / family / score bucket, and A/B compare of two runs |
+| Heat map | order-book snapshots as a time × price heat map, with the price line and each wall's lifecycle (standing / pulled / eaten) |
+| Footprint | bid × ask ladders per candle with imbalance marks, stacked imbalances and absorption (same rules as the signal engine) |
+| GEX | per-strike gamma exposure, spot and flip level, flip history (BTC/ETH) |
+| Profile | volume profile with POC / value area / HVNs rebuilt from stored trades |
+
+Settings (environment variables): `DB_PATH` (default `../data/orderflow.db` relative to `dashboard/`), `CONFIG_PATH`
+(default `../config/config.json`, the same file the collector uses), and optionally `DASHBOARD_PASSWORD` (+ `DASHBOARD_USER`,
+default `admin`) to require HTTP Basic auth. **It has no login of its own by default — keep it on localhost, or set a password
+and put it behind HTTPS, before exposing it.**
+
+Notes: it uses Next.js 16 in webpack mode (`--webpack`) because it shares the collector's TypeScript (report, footprint and profile
+code) and that code uses Node-style `.js` import suffixes, which Turbopack can't resolve. Times are UTC. The heat map and footprint pages
+only have data for periods the collector was running with those features on; a replay run has no heat map or footprint data.
 
 ## How it works
 
@@ -216,7 +250,8 @@ src/indicators            candles, atr, bigTrades, volumeProfile, divergence
 src/alerts                cooldown, rules, telegram/console notifiers
 src/signals               evaluate (pure scoring+plan), tracker, format
 src/engine                AssetEngine, Pipeline        src/backtest   replay, report, synthetic data
-src/cli                   collect, replay, report, backfill, seed-synthetic, footprint, heatmap, gex, compare     tests/  node:test
+src/cli                   collect, replay, report, backfill, seed-synthetic, seed-demo, footprint, heatmap, gex, compare
+dashboard/                Next.js read-only dashboard (app/, components/, lib/ data layer, tests/)     tests/  node:test
 ```
 
 ## Caveats
