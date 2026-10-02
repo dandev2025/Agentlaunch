@@ -15,18 +15,18 @@ export interface WsLike {
 export type WsFactory = (url: string) => WsLike;
 export const defaultWsFactory: WsFactory = (url) => new WebSocket(url) as unknown as WsLike;
 
-export function streamUrl(
-  base: string,
-  symbols: string[],
-  depth: { enabled: boolean; speedMs: number },
-): string {
-  const streams = symbols.flatMap((s) => {
-    const l = s.toLowerCase();
-    const out = [`${l}@aggTrade`];
-    if (depth.enabled) out.push(`${l}@depth@${depth.speedMs}ms`); // diff stream; the book is rebuilt locally
-    return out;
-  });
-  return `${base.replace(/\/$/, '')}/stream?streams=${streams.join('/')}`;
+export type StreamKind = 'market' | 'public';
+
+/**
+ * Binance split the USDⓈ-M futures WebSocket by traffic type (see their "Important WebSocket Change Notice"):
+ *  - `/market` carries trades (`<symbol>@aggTrade`), mark price, klines, tickers...
+ *  - `/public` carries the high-frequency order book (`<symbol>@depth@500ms`, book tickers)
+ * The old combined `/stream` URL only delivers `/public` data now — trades silently stop — so each kind needs its own connection.
+ * `base` is the root, e.g. `wss://fstream.binance.com`.
+ */
+export function streamUrl(base: string, kind: StreamKind, symbols: string[], depth: { speedMs: number }): string {
+  const names = symbols.map((s) => (kind === 'market' ? `${s.toLowerCase()}@aggTrade` : `${s.toLowerCase()}@depth@${depth.speedMs}ms`)); // diff stream; the book is rebuilt locally
+  return `${base.replace(/\/$/, '')}/${kind}/stream?streams=${names.join('/')}`;
 }
 
 /** Binance: `m` = buyer is the maker, so the aggressor was a seller. */

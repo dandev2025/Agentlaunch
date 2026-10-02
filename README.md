@@ -82,7 +82,7 @@ only have data for periods the collector was running with those features on; a r
 ## How it works
 
 ```
-Binance WS (aggTrade [+depth]) ─ reconnect/heartbeat ─ gap check (+REST backfill) ─┬─▶ SQLite trades
+Binance WS (/market aggTrade, /public depth) ─ reconnect/heartbeat ─ gap check (+REST backfill) ─┬─▶ SQLite trades
                                                                                    └─▶ AssetEngine (per symbol)
 AssetEngine: candles+delta (1m/5m/15m) · big trades · rolling volume profile · ATR
    ├─ alert rules  → big trade at POC/HVN · delta divergence      → Telegram + alerts table
@@ -90,13 +90,22 @@ AssetEngine: candles+delta (1m/5m/15m) · big trades · rolling volume profile �
 ```
 
 ### Collector robustness
+- **Binance WebSocket endpoints.** Binance split the USDⓈ-M futures WebSocket by traffic type: trades (`<symbol>@aggTrade`) are on
+  `<wsBaseUrl>/market`, the order book (`<symbol>@depth@500ms`) on `<wsBaseUrl>/public`. The old combined `/stream` URL now only
+  delivers `/public` data, so trades silently stop. The collector therefore opens **one connection per endpoint** (the `/public` one only
+  when the heat map is on), and `collector.wsBaseUrl` must be the root (`wss://fstream.binance.com`) — config validation rejects
+  legacy/path-style URLs. If Binance changes this again, the collector says so: the `[status]` line shows message counts
+  (`msgs agg=… depth=…`) and prints `[WARN]` if a connection is open but delivers nothing, or if frames can't be read.
 - Auto-reconnect with exponential backoff + jitter; ping heartbeat; watchdog kills a connection that
   has produced no frames for `staleAfterMs`. Binance's 24h forced disconnect is handled the same way.
 - **Gap detection:** aggTrade ids are consecutive, so any jump is a gap. It is logged to the `gaps`
   table and back-filled from REST `aggTrades?fromId=` *before* the live trade is processed. Backfilled
   trades update candles/profile/delta but never fire alerts or signals (they'd be stale).
 - On startup the last `warmupMinutes` of stored trades are replayed silently so ATR, profile and delta
-  history are warm.
+  history are warm. Even so, the volume profile is meaningless until it has seen a stretch of trading (right after a first start it is
+  built from seconds of data), so **profile-based alerts (big trade at POC/HVN, wall events) and all signals are held back until the
+  engine has seen `volumeProfile.minWarmupMinutes` (30) of trading**, warm-up replay included — a restart with stored trades is warm
+  at once. Big trades are still recorded meanwhile. Set it to 0 to disable.
 - The depth stream feeds the heat map (see below); set `heatmap.enabled`/`collector.depth.enabled` to false to run trades-only.
 
 ### Indicators (`src/indicators`, each pure and unit-tested)
@@ -255,14 +264,12 @@ dashboard/                Next.js read-only dashboard (app/, components/, lib/ d
 ```
 
 ## Caveats
-- Written and tested in an environment where Binance was unreachable. The WebSocket client, gap
-  recovery and live runner are tested against a fake socket/REST (reconnect, stale watchdog, gap backfill),
-  but **not yet against the live exchange**. Run `npm run collect` and watch the `[collector]` log first.
-  Binance has been reorganising futures WebSocket endpoints; if the default `wsBaseUrl` is rejected, check
-  Binance's current docs and change `collector.wsBaseUrl`.
+- The first run against the real Binance feeds found two bugs that fakes couldn't (the trade endpoint split above, and an order-book
+  resync loop), both fixed with regression tests. The code is much better exercised now, but treat the first days of live collection as
+  a shakedown: watch the `[status]` and `[WARN]` lines, and send me anything odd.
 - `seed-synthetic` data is fabricated (a mean-reverting random walk). Replay results on it only prove the
   pipeline works; they say nothing about edge. Judge weights on real data with a meaningful number of signals.
-- The order-book sync and wall tracking are tested against a fake exchange, not the real depth feed. Check `[heatmap]` log lines
+- Check `[heatmap]` log lines
   and `npm run heatmap` after a few hours of collecting; `wallMinQty` and `relMult` are untuned placeholders. Depth traffic is
   much heavier than trades alone (three symbols at 500ms).
 - The Deribit client is tested against fakes only (the sandbox could not reach Deribit). Run `npm run gex -- --live` once to confirm the

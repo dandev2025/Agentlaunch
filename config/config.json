@@ -65,7 +65,8 @@
     "hvnFactor": 1.5,
     "hvnMinSepBins": 3,
     "hvnSmoothBins": 1,
-    "recomputeMs": 5000
+    "recomputeMs": 5000,
+    "minWarmupMinutes": 30
   },
   "footprint": {
     "enabled": true,

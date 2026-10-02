@@ -53,6 +53,8 @@ export class AssetEngine {
   lastPrice = 0;
   lastTs = 0;
   private evalDue = false;
+  /** Timestamp of the first trade this engine saw (warm-up replay included). */
+  private firstTs = 0;
   /** While true: state is updated but no alerts / new signals are produced (warm-up, backfill). */
   silent = false;
 
@@ -76,6 +78,15 @@ export class AssetEngine {
     for (const s of deps.store.loadOpenSignals(symbol)) this.tracker.add(s);
   }
 
+  /**
+   * The volume profile (POC / value area / HVNs) is meaningless until it has seen a reasonable stretch of trading, and right after
+   * a start it is built from seconds of data — alerts and signals measured against it would be noise. Trading time seen during the
+   * silent warm-up replay counts, so a restart with stored trades is warm immediately.
+   */
+  private isWarm(now: number): boolean {
+    return this.firstTs > 0 && now - this.firstTs >= this.cfg.volumeProfile.minWarmupMinutes * 60_000;
+  }
+
   private snapshot(now: number) {
     if (!this.snapCache || now - this.snapCache.ts >= this.cfg.volumeProfile.recomputeMs) {
       this.snapCache = { ts: now, snap: this.profile.snapshot(now) };
@@ -95,6 +106,7 @@ export class AssetEngine {
     this.stats.trades++;
     this.lastPrice = t.price;
     this.lastTs = t.ts;
+    if (!this.firstTs) this.firstTs = t.ts;
     this.profile.add(t.ts, t.price, t.size);
     this.tracker.onPrice(this.symbol, t.ts, t.price);
 
@@ -120,7 +132,7 @@ export class AssetEngine {
         deps.store.recordBigTrade(big);
         const rule = cfg.alerts.bigTradeAtLevel;
         const snap = this.snapshot(t.ts);
-        if (rule.enabled && snap) {
+        if (rule.enabled && snap && this.isWarm(t.ts)) {
           const hit = bigTradeAtLevel(big, snap, rule.levels, this.nearDistance(t.price));
           if (hit && this.cooldown.tryFire(`btl:${this.symbol}:${big.side}:${hit.level.kind}:${hit.level.price}`, t.ts, rule.cooldownMs)) {
             this.emitAlert(t.ts, 'big_trade_at_level', hit.message, hit.inputs);
@@ -151,7 +163,7 @@ export class AssetEngine {
   /** Live wall lifecycle events from the heat-map service. Alerts only for events at profile levels. */
   onWallEvent(e: WallEvent): void {
     const rule = this.cfg.alerts.wall;
-    if (this.silent || !rule.enabled || !rule.events.includes(e.type)) return;
+    if (this.silent || !rule.enabled || !rule.events.includes(e.type) || !this.isWarm(e.ts)) return;
     const snap = this.snapshot(e.ts);
     if (!snap) return;
     const hit = wallEventAtLevel(e, snap, rule.levels, this.nearDistance(e.wall.price));
@@ -200,6 +212,7 @@ export class AssetEngine {
   }
 
   private evaluateSignals(now: number): void {
+    if (!this.isWarm(now)) return;
     const sc = this.cfg.signals;
     const price = this.lastPrice;
     const htfHist = this.builders.get(sc.htf.timeframe)!.history;
