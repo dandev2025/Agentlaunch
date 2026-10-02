@@ -25,7 +25,7 @@ export function openDb(): DbState {
   const p = dbPath();
   if (!existsSync(p)) {
     g.__dash_store = undefined;
-    return { ok: false, path: p, reason: 'missing', detail: 'No database file yet. Start the collector (`npm run collect`) or seed demo data (`npm run seed-synthetic`).' };
+    return { ok: false, path: p, reason: 'missing', detail: 'No database file yet. Start the collector (`npm run collect`), or create demo data with `npm run seed-demo` and start the dashboard with DB_PATH=data/demo.db.' };
   }
   try {
     if (!g.__dash_store || g.__dash_store.path !== p) g.__dash_store = { path: p, store: new Store(p, 'live', { readOnly: true }) };
