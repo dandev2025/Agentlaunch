@@ -4,3 +4,6 @@ dist/
 .env
 *.db
 *.db-*
+dashboard/.next/
+dashboard/next-env.d.ts
+*.tsbuildinfo

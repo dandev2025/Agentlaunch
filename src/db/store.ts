@@ -70,11 +70,21 @@ export class Store {
   readonly db: DatabaseSync;
   private stmts = new Map<string, StatementSync>();
 
-  constructor(path: string, readonly runId: string = LIVE_RUN) {
+  /** `readOnly` opens an existing database without creating it, changing its mode or migrating it (used by the dashboard). */
+  constructor(path: string, readonly runId: string = LIVE_RUN, opts: { readOnly?: boolean } = {}) {
+    if (opts.readOnly) {
+      this.db = new DatabaseSync(path, { readOnly: true });
+      return;
+    }
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     this.migrate();
+  }
+
+  /** Number of migrations applied to this database. */
+  get schemaVersion(): number {
+    return (this.db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   }
 
   /** A view of the same connection that writes under a different run id. */

@@ -55,6 +55,12 @@ export class VolumeProfile {
     return this.total;
   }
 
+  /** Raw volume per price bin (ascending price) for charting; sparse — bins without volume are omitted. */
+  histogram(now = this.latest): { price: number; volume: number }[] {
+    this.evict(now);
+    return [...this.agg].sort((a, b) => a[0] - b[0]).map(([bin, volume]) => ({ price: bin * this.o.binSize, volume }));
+  }
+
   snapshot(now = this.latest): ProfileSnapshot | null {
     this.evict(now);
     if (this.agg.size === 0 || this.total <= 0) return null;
