@@ -70,8 +70,8 @@ Run it next to `npm run collect`; pages re-read the database every 10–60 s. Pa
 | GEX | per-strike gamma exposure, spot and flip level, flip history (BTC/ETH) |
 | Profile | volume profile with POC / value area / HVNs rebuilt from stored trades |
 
-Settings (environment variables): `DB_PATH` (default `../data/orderflow.db` relative to `dashboard/`), `CONFIG_PATH`
-(default `../config/config.json`, the same file the collector uses), and optionally `DASHBOARD_PASSWORD` (+ `DASHBOARD_USER`,
+Settings (environment variables): `DB_PATH` (default `data/orderflow.db`) and `CONFIG_PATH` (default `config/config.json`, the same file
+the collector uses) — relative paths are relative to the **repo root**, absolute paths work too; `PORT` (default 3000), and optionally `DASHBOARD_PASSWORD` (+ `DASHBOARD_USER`,
 default `admin`) to require HTTP Basic auth. **It has no login of its own by default — keep it on localhost, or set a password
 and put it behind HTTPS, before exposing it.**
 

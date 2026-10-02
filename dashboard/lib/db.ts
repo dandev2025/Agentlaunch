@@ -7,8 +7,12 @@ export type DbState =
   | { ok: true; store: Store; path: string }
   | { ok: false; path: string; reason: 'missing' | 'schema' | 'error'; detail: string };
 
-export function dbPath(): string {
-  return process.env.DB_PATH ?? path.resolve(process.cwd(), '..', 'data', 'orderflow.db');
+/** The dashboard runs from `dashboard/`, so the repo root (where the collector writes `data/`) is one level up. */
+export const repoRoot = (cwd = process.cwd()): string => path.resolve(cwd, '..');
+
+/** `DB_PATH` may be absolute or relative to the repo root (not to `dashboard/`). */
+export function dbPath(cwd = process.cwd(), env: Record<string, string | undefined> = process.env): string {
+  return path.resolve(repoRoot(cwd), env.DB_PATH ?? path.join('data', 'orderflow.db'));
 }
 
 const g = globalThis as unknown as { __dash_store?: { path: string; store: Store } };
@@ -21,7 +25,7 @@ export function openDb(): DbState {
   const p = dbPath();
   if (!existsSync(p)) {
     g.__dash_store = undefined;
-    return { ok: false, path: p, reason: 'missing', detail: 'No database file yet. Start the collector (`npm run collect`) or seed demo data (`npm run seed-synthetic`).' };
+    return { ok: false, path: p, reason: 'missing', detail: 'No database file yet. Start the collector (`npm run collect`), or create demo data with `npm run seed-demo` and start the dashboard with DB_PATH=data/demo.db.' };
   }
   try {
     if (!g.__dash_store || g.__dash_store.path !== p) g.__dash_store = { path: p, store: new Store(p, 'live', { readOnly: true }) };

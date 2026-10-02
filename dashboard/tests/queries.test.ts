@@ -11,7 +11,8 @@ import { runReplay } from '../../src/backtest/replay.js';
 import { DEFAULT_SYNTH, generateSynthetic } from '../../src/backtest/synthetic.js';
 import { loadConfig } from '../../src/config/load.js';
 import { VolumeProfile } from '../../src/indicators/volumeProfile.js';
-import { openDb } from '../lib/db.js';
+import { openDb, dbPath } from '../lib/db.js';
+import { configPath } from '../lib/config.js';
 import { buildHeatGrid, toBase64 } from '../lib/grid.js';
 import * as q from '../lib/queries.js';
 
@@ -49,6 +50,16 @@ before(() => {
 });
 
 after(() => { rw.close(); rmSync(dir, { recursive: true, force: true }); delete process.env.DB_PATH; });
+
+test('DB_PATH and CONFIG_PATH: relative values are relative to the repo root, not dashboard/ (the demo-DB bug)', () => {
+  const cwd = '/repo/dashboard'; // how `npm run dashboard` runs the app
+  assert.equal(dbPath(cwd, { DB_PATH: 'data/demo.db' }), '/repo/data/demo.db');
+  assert.equal(dbPath(cwd, {}), '/repo/data/orderflow.db');
+  assert.equal(dbPath(cwd, { DB_PATH: '/abs/other.db' }), '/abs/other.db');
+  assert.equal(configPath(cwd, { CONFIG_PATH: 'config/x.json' }), '/repo/config/x.json');
+  assert.equal(configPath(cwd, {}), '/repo/config/config.json');
+  assert.equal(configPath(cwd, { CONFIG_PATH: '/abs/c.json' }), '/abs/c.json');
+});
 
 test('openDb: missing file and old schema are reported, a good file opens read-only and cannot be written', () => {
   const keep = process.env.DB_PATH;
