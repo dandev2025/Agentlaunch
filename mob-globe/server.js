@@ -20,7 +20,15 @@ function pick(e){const m=Math.max(...e.ll),p=e.ll.map(v=>Math.exp(v-m));if(e.n>=
 let u=Math.random()*(p[0]+p[1]+p[2]);for(let r=0;r<3;r++){u-=p[r];if(u<=0)return r}return 0}
 let sol=150;async function price(){try{sol=(await(await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd")).json()).solana.usd}catch{}}
 price();setInterval(price,60000);
-const server=http.createServer((q,r)=>{try{r.writeHead(200,{"content-type":"text/html"});r.end(fs.readFileSync(path.join(dir,"index.html")))}catch{r.writeHead(404);r.end()}});
+const logoBuf=new Map(),logoBusy=new Set(),logoFail=new Map(),IPFS=["https://ipfs.io/ipfs/","https://cloudflare-ipfs.com/ipfs/"];
+const logoUrl=(mint,hint)=>{if(!mint)return;if(logoBuf.has(mint))return "/logo/"+mint;ensureLogo(mint,hint);};
+async function grab(u){const r=await fetch(u,{signal:AbortSignal.timeout(6000)});const ct=r.headers.get("content-type")||"";if(!r.ok||!/^image\//.test(ct))throw 0;const b=Buffer.from(await r.arrayBuffer());if(b.length>600000)throw 0;return{b,ct}}
+async function ensureLogo(mint,hint){if(logoBusy.has(mint)||logoBuf.has(mint)||Date.now()-(logoFail.get(mint)||0)<300000||logoBusy.size>30)return;logoBusy.add(mint);
+try{let u=hint||meta.get(mint)?.logo;if(!u&&meta.get(mint)?.uri){try{u=(await(await fetch(meta.get(mint).uri,{signal:AbortSignal.timeout(5000)})).json()).image}catch{}}
+if(!u)u=(await tokenInfo(mint)).logo;if(!u)throw 0;const c=[u];const m=u.match(/\/ipfs\/(.+)$/);if(m)IPFS.forEach(g=>c.push(g+m[1]));
+for(const x of c){try{logoBuf.set(mint,await grab(x));if(logoBuf.size>800)logoBuf.delete(logoBuf.keys().next().value);return}catch{}}throw 0}
+catch{logoFail.set(mint,Date.now())}finally{logoBusy.delete(mint)}}
+const server=http.createServer((q,r)=>{try{const lm=q.url.match(/^\/logo\/([1-9A-HJ-NP-Za-km-z]{32,44})$/);if(lm){const e=logoBuf.get(lm[1]);if(!e){r.writeHead(404);return r.end()}r.writeHead(200,{"content-type":e.ct,"cache-control":"public,max-age=86400"});return r.end(e.b)}r.writeHead(200,{"content-type":"text/html"});r.end(fs.readFileSync(path.join(dir,"index.html")))}catch{r.writeHead(404);r.end()}});
 const wss=new WebSocketServer({server,path:"/stream"});
 // Tracked wallets: browsers send {pin:"<address>"}; the server then follows every trade from that wallet (no sampling)
 const watched=new Set(),B58=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -28,7 +36,7 @@ wss.on("connection",c=>c.on("message",raw=>{let m;try{m=JSON.parse(raw)}catch{re
 function watch(w){if(watched.has(w)||watched.size>=50)return;watched.add(w);if(up?.readyState===1)cmd("subscribeAccountTrade",w);if(sw?.readyState===1)subWallet(w)}
 const subWallet=w=>sw.send(JSON.stringify({jsonrpc:"2.0",id:"w"+Math.random(),method:"logsSubscribe",params:[{mentions:[w]},{commitment:"confirmed"}]}));
 const out=(sym,buy,usd,venue,wallet,logo,mint,sig)=>{const e=wallets.get(wallet)||touch(wallet),bot=e.bot,r=bot?-1:pick(e),pool=HUBS.filter(h=>h[3]===r),h=bot?["Bots",0,0,-1]:pool[Math.random()*pool.length|0],
-m=JSON.stringify({sym,buy,usd,venue,city:h[0],lon:h[1],lat:h[2],r,logo,wallet,mint,sig,n:e.n,bot});wss.clients.forEach(c=>c.readyState===1&&c.send(m));st.sent++};
+m=JSON.stringify({sym,buy,usd,venue,city:h[0],lon:h[1],lat:h[2],r,logo:logoUrl(mint,logo),wallet,mint,sig,n:e.n,bot});wss.clients.forEach(c=>c.readyState===1&&c.send(m));st.sent++};
 
 // ---- pump.fun via PumpPortal ----
 const meta=new Map(),subs=[];let up,last=0;
@@ -54,9 +62,11 @@ whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc:"Orca",LBUZKhRxPF3XUpBCjp4YzTKgLccjZ
 const WSOL="So11111111111111111111111111111111111111112",USDC="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const rpc=async(method,params)=>(await fetch(HTTP,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params}),signal:AbortSignal.timeout(8000)})).json();
 const seen=new Set(),queue=[],tokMeta=new Map(),done=new Set(),pq=[],wsubs=new Set();let sw;
-async function tokenInfo(mint){if(tokMeta.has(mint))return tokMeta.get(mint);let v={sym:mint.slice(0,4)};
-try{const p=(await(await fetch("https://api.dexscreener.com/latest/dex/tokens/"+mint,{signal:AbortSignal.timeout(4000)})).json()).pairs?.[0];if(p)v={sym:p.baseToken.symbol,logo:p.info?.imageUrl}}catch{}
-tokMeta.set(mint,v);if(tokMeta.size>5000)tokMeta.delete(tokMeta.keys().next().value);return v}
+let lastDas=0;
+async function tokenInfo(mint){const c=tokMeta.get(mint);if(c&&(c.ok||Date.now()-c.t<60000))return c;let v={sym:mint.slice(0,4),t:Date.now()};
+try{const p=(await(await fetch("https://api.dexscreener.com/latest/dex/tokens/"+mint,{signal:AbortSignal.timeout(4000)})).json()).pairs?.[0];if(p){v.sym=p.baseToken.symbol;v.logo=p.info?.imageUrl}}catch{}
+if(!v.logo&&(KEY||process.env.RPC_HTTP)&&Date.now()-lastDas>4000){lastDas=Date.now();st.das=(st.das||0)+1;try{const x=(await rpc("getAsset",{id:mint})).result?.content;if(x){if(x.metadata?.symbol)v.sym=x.metadata.symbol;v.logo=x.links?.image||x.files?.[0]?.cdn_uri||x.files?.[0]?.uri}}catch{}}
+v.ok=!!v.logo;tokMeta.set(mint,v);if(tokMeta.size>5000)tokMeta.delete(tokMeta.keys().next().value);return v}
 const bal=b=>parseFloat(b.uiTokenAmount.uiAmountString||"0");
 async function decode(sig){if(done.has(sig))return;done.add(sig);if(done.size>5000)done.delete(done.values().next().value);st.tried++;const r=await rpc("getTransaction",[sig,{encoding:"jsonParsed",maxSupportedTransactionVersion:1,commitment:"confirmed"}]);if(r.error){st.rpcErr++;st.err="rpc: "+JSON.stringify(r.error).slice(0,160);return}const t=r.result;
 if(!t){st.noTx++;return}if(t.meta?.err){st.failedTx++;return}const keys=t.transaction.message.accountKeys.map(k=>k.pubkey||k),signer=keys[0],m=t.meta,d=new Map();
@@ -72,7 +82,7 @@ setInterval(()=>{const i=queue.findLastIndex(x=>Date.now()-x.t>3000);if(i<0)retu
 const B58A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz",TRADE=Buffer.from("bddb7fd34ee661ee","hex");
 const b58=u=>{let n=0n;for(const x of u)n=n*256n+BigInt(x);let o="";while(n>0n){o=B58A[Number(n%58n)]+o;n/=58n}for(const x of u){if(x)break;o="1"+o}return o};
 const pumpEvent=b=>b.length>=97&&b.subarray(0,8).equals(TRADE)?{mint:b58(b.subarray(8,40)),sol:Number(b.readBigUInt64LE(40))/1e9,buy:b[56]===1,user:b58(b.subarray(57,89))}:null; // pump.fun TradeEvent from "Program data:" log lines
-function pumpTrade(e,sig){st.pumpEv++;touch(e.user);const usd=Math.round(e.sol*sol),now=Date.now(),pin=watched.has(e.user);if(usd<1&&!pin)return;if(!pin&&usd<1000&&now-last<200)return;if(!pin)last=now;st.pumpTrades++;
+function pumpTrade(e,sig){st.pumpEv++;touch(e.user);const usd=Math.round(e.sol*sol),now=Date.now(),pin=watched.has(e.user);if(usd<1&&!pin)return;if(!pin&&usd<1000&&now-last<100)return;if(!pin)last=now;st.pumpTrades++;
 const m=meta.get(e.mint),go=(sy,l)=>out("$"+String(sy).toUpperCase(),e.buy,usd,"pump.fun",e.user,l,e.mint,sig);if(m)go(m.sym||e.mint.slice(0,4),m.logo);else tokenInfo(e.mint).then(i=>go(i.sym,i.logo))}
 const PUMP="6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";let pumpSub;
 function dex(){sw=new WebSocket(WSU);let n=0;pumpSub=undefined;

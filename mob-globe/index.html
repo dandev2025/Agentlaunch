@@ -222,7 +222,7 @@ if(im){q.save();q.beginPath();q.arc(32,32,27,0,7);q.clip();if(t==="$MOB"){const 
 q.lineWidth=4;q.strokeStyle="#ffe9a8";q.beginPath();q.arc(32,32,30,0,7);q.stroke()}
 function getCoin(t,logo){let k=coins[t];if(!k){k=coins[t]=document.createElement("canvas");k.width=k.height=64;drawCoin(k,t,null)}
 if(t==="$MOB"&&!k.M){k.M=1;const go=()=>drawCoin(k,t,mi);mi.complete?go():mi.addEventListener("load",go)}
-if(logo&&!k.L){k.L=1;const im=new Image();im.onload=()=>drawCoin(k,t,im);im.src=logo}return k}
+if(logo&&k.L!==logo){k.L=logo;const im=new Image();im.onload=()=>drawCoin(k,t,im);im.onerror=()=>{if(k.L===logo)k.L=0};im.src=logo}return k}
 let WS=null;try{const ws=WS=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/stream");
 ws.onopen=()=>{live=true;filt=null;PINS.forEach(p=>ws.send(JSON.stringify({pin:p.addr})));chipsEl.innerHTML=["All venues","pump.fun","Jupiter","Raydium","Orca","Meteora"].map((v,i)=>`<button class="chip${i?"":" on"}" data-t="${i?v:""}">${v}</button>`).join("");document.getElementById("lv").textContent="LIVE";document.getElementById("nt").textContent="LIVE SOLANA DEX TRADES"};
 ws.onmessage=m=>{try{const d=JSON.parse(m.data);if(filt&&d.venue!==filt&&!PINS.some(p=>p.addr===d.wallet))return;trade({hub:[d.city,d.lon,d.lat,d.r],buy:d.buy,usd:d.usd,sym:d.sym,logo:d.logo,venue:d.venue,wallet:d.wallet,mint:d.mint,sig:d.sig,n:d.n,bot:d.bot})}catch(e){}};
