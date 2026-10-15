@@ -28,6 +28,8 @@ Only the relay's own site can open the WebSocket; 8 connections and 10 messages/
 flushes the database before exiting. Secrets exist only in the host's environment.
 
 ## Cost note
+Render (checked on render.com/pricing, 15 Oct 2026): Hobby workspace $0 + an always-on instance at $7/month (0.5 CPU, 512 MB). Free instances sleep, so don't use them.
+Bandwidth: 5 GB/month included, then $0.15/GB. Each open viewer is capped at about 8 trades/s (`SEND_PER_SEC`), roughly 200 MB per day per tab left open all day. Big trades ($2k+) and tracked wallets are never dropped.
 Helius and Supabase free tiers are used as-is. The host itself usually costs a few dollars a month for always-on. Check the current price.
 
 ## Fly.io (cheapest always-on option)
