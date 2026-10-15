@@ -4,7 +4,7 @@ import { createStore } from "../lib/store.js";
 
 const mk = (over = {}) => {
   const calls = []; let t = Date.UTC(2026, 9, 15, 12, 0, 30), fail = false;
-  const fetchFn = async (url, init) => { calls.push({ url, body: init?.body ? JSON.parse(init.body) : null, headers: init?.headers }); return fail ? { ok: false, status: 503, text: async () => "down" } : { ok: true, status: 200, json: async () => [], text: async () => "" } };
+  const fetchFn = async (url, init) => { calls.push({ url, body: init?.body ? JSON.parse(init.body) : null, headers: init?.headers }); return fail ? { ok: false, status: 503, text: async () => "down" } : { ok: true, status: 200, json: async () => [], text: async () => "[]" } };
   const s = createStore({ url: "https://x.supabase.co", key: "K", fetchFn, now: () => t, log: () => {}, ...over });
   return { s, calls, tick: ms => (t += ms), setFail: v => (fail = v) };
 };
@@ -61,7 +61,8 @@ test("nothing is counted before the launch date, counting starts after it", asyn
 });
 test("totals() sums the daily rows and passes the launch date as the start", async () => {
   const calls = []; const fetchFn = async (u, i) => { calls.push({ u, b: i?.body && JSON.parse(i.body) });
-    return { ok: true, json: async () => u.includes("flow_top") ? [{ mint: "M", sym: "$A", buy: "5", sell: "2", trades: 3 }] : [{ t: "d1", buy: "10", sell: "4", trades: 3 }, { t: "d2", buy: "1.5", sell: "0.5", trades: 2 }] } };
+    const body = u.includes("flow_top") ? [{ mint: "M", sym: "$A", buy: "5", sell: "2", trades: 3 }] : [{ t: "d1", buy: "10", sell: "4", trades: 3 }, { t: "d2", buy: "1.5", sell: "0.5", trades: 2 }];
+    return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } };
   const s = createStore({ url: "https://x.supabase.co", key: "K", fetchFn, launch: Date.UTC(2026, 9, 16), log: () => {} });
   const r = await s.totals(); assert.deepEqual([r.buy, r.sell, r.trades], [11.5, 4.5, 5]); assert.equal(r.since, "2026-10-16T00:00:00.000Z"); assert.equal(r.top[0].sym, "$A");
   assert.equal(calls[0].b.since, "2026-10-16T00:00:00.000Z");
