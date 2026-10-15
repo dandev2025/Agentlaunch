@@ -3,6 +3,7 @@
 import http from "node:http";import fs from "node:fs";import path from "node:path";import {fileURLToPath} from "node:url";
 import WebSocket,{WebSocketServer} from "ws";
 import {createStore} from "./lib/store.js";
+import {originAllowed,clientIp,createRateLimit,createConnLimit,backoff,cleanSym} from "./lib/limits.js";
 const PORT=process.env.PORT||8080,KEY=process.env.HELIUS_KEY,dir=path.dirname(fileURLToPath(import.meta.url));
 const WSU=process.env.RPC_WS||`wss://mainnet.helius-rpc.com/?api-key=${KEY}`,HTTP=process.env.RPC_HTTP||`https://mainnet.helius-rpc.com/?api-key=${KEY}`;
 const HUBS=[["New York",-74,40.7,0],["Miami",-80,25.8,0],["San Francisco",-122,37.8,0],["Toronto",-79,43.7,0],["Sao Paulo",-46.6,-23.5,0],
@@ -12,6 +13,8 @@ const CEN=[-80,10,105];
 const act=(r,h)=>{const l=(h+CEN[r]/15+24)%24;return .15+.85*Math.max(0,Math.cos((l-15)/24*2*Math.PI))};
 // Wallet stats. Region = naive-Bayes over trading hours (1-2 trades = weighted guess, 3+ = best match).
 // Bot rule: 8+ trades inside 60s, or 15+ trades spread over 16+ UTC hours. Bots are not given a location.
+const ALLOWED=(process.env.ALLOWED_ORIGINS||"").split(",").map(x=>x.trim()).filter(Boolean),TRUST=process.env.TRUST_PROXY!=="0",httpRL=createRateLimit({max:120,windowMs:60000}),connLim=createConnLimit(8),msgRL=createRateLimit({max:10,windowMs:10000}),started=Date.now();
+let lastOut=0,pb=0,db0=0,indexHtml=null;
 const store=createStore({url:process.env.SUPABASE_URL,key:process.env.SUPABASE_SERVICE_ROLE_KEY}),flowCache=new Map();
 const wallets=new Map(),bits=x=>{let c=0;while(x){c+=x&1;x>>=1}return c};
 function touch(w){const now=Date.now(),h=new Date(now).getUTCHours();let e=wallets.get(w);if(!e)e={n:0,ll:[0,0,0],hrs:0,t:[],bot:false};
@@ -34,15 +37,17 @@ if(mint.endsWith("pump"))c.push(`https://images.pump.fun/coin-image/${mint}?imag
 c.push(`https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png`);
 let why="";for(const x of c){try{logoBuf.set(mint,await grab(x));if(logoBuf.size>800)logoBuf.delete(logoBuf.keys().next().value);st.logoOk++;return}catch(e){why=`${new URL(x).host}: ${e.message}`}}
 st.logoFail++;st.logoWhy=why;logoFail.set(mint,Date.now())})().catch(()=>{}).finally(()=>logoP.delete(mint));logoP.set(mint,p);return p}
-const server=http.createServer((q,r)=>{try{const fm=q.url.match(/^\/api\/flow\?range=(24h|7d|30d)$/);if(!fm&&q.url.startsWith("/api/")){r.writeHead(400);return r.end()}if(fm){const send=(c,o)=>{r.writeHead(c,{"content-type":"application/json","cache-control":"no-store"});r.end(JSON.stringify(o))};if(!store.enabled)return send(503,{error:"database not configured"});const hit=flowCache.get(fm[1]);if(hit&&Date.now()-hit.t<30000)return send(200,hit.d);store.flow(fm[1]).then(d=>{flowCache.set(fm[1],{t:Date.now(),d});send(200,d)}).catch(e=>{st.err="flow: "+e.message;send(502,{error:"query failed"})});return}const lm=q.url.match(/^\/logo\/([1-9A-HJ-NP-Za-km-z]{32,44})$/);if(lm){const e=logoBuf.get(lm[1]);if(!e){r.writeHead(404);return r.end()}r.writeHead(200,{"content-type":e.ct,"cache-control":"public,max-age=86400"});return r.end(e.b)}r.writeHead(200,{"content-type":"text/html"});r.end(fs.readFileSync(path.join(dir,"index.html")))}catch{r.writeHead(404);r.end()}});
-const wss=new WebSocketServer({server,path:"/stream"});
+const server=http.createServer((q,r)=>{try{r.setHeader("x-content-type-options","nosniff");r.setHeader("referrer-policy","no-referrer");
+if(q.url==="/healthz"){const up_=up?.readyState===1,dx=sw?.readyState===1||!(KEY||process.env.RPC_WS),age=lastOut?Date.now()-lastOut:null,grace=Date.now()-started<90000,ok=grace||(up_&&dx&&age!==null&&age<180000);r.writeHead(ok?200:503,{"content-type":"application/json","cache-control":"no-store"});return r.end(JSON.stringify({ok,uptimeS:Math.round((Date.now()-started)/1000),pump:up_,dex:dx,lastTradeAgeMs:age,clients:wss.clients.size,db:store.enabled?{saved:store.stat.flushed,failures:store.stat.failures}:"off"}))}
+if((q.url.startsWith("/api/")||q.url.startsWith("/logo/"))&&!httpRL.hit(clientIp(q,TRUST))){r.writeHead(429);return r.end()}const fm=q.url.match(/^\/api\/flow\?range=(24h|7d|30d)$/);if(!fm&&q.url.startsWith("/api/")){r.writeHead(400);return r.end()}if(fm){const send=(c,o)=>{r.writeHead(c,{"content-type":"application/json","cache-control":"no-store"});r.end(JSON.stringify(o))};if(!store.enabled)return send(503,{error:"database not configured"});const hit=flowCache.get(fm[1]);if(hit&&Date.now()-hit.t<30000)return send(200,hit.d);store.flow(fm[1]).then(d=>{flowCache.set(fm[1],{t:Date.now(),d});send(200,d)}).catch(e=>{st.err="flow: "+e.message;send(502,{error:"query failed"})});return}const lm=q.url.match(/^\/logo\/([1-9A-HJ-NP-Za-km-z]{32,44})$/);if(lm){const e=logoBuf.get(lm[1]);if(!e){r.writeHead(404);return r.end()}r.writeHead(200,{"content-type":e.ct,"cache-control":"public,max-age=86400"});return r.end(e.b)}const page=process.env.NODE_ENV==="production"?(indexHtml||=fs.readFileSync(path.join(dir,"index.html"))):fs.readFileSync(path.join(dir,"index.html"));r.writeHead(200,{"content-type":"text/html; charset=utf-8"});r.end(page)}catch{r.writeHead(404);r.end()}});
+const wss=new WebSocketServer({server,path:"/stream",maxPayload:2048,verifyClient:({origin,req},cb)=>originAllowed(origin,req.headers.host,ALLOWED)?cb(true):cb(false,403,"origin not allowed")});
 // Tracked wallets: browsers send {pin:"<address>"}; the server then follows every trade from that wallet (no sampling)
 const watched=new Set(),B58=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-wss.on("connection",c=>{c.send(JSON.stringify({tracked:[...watched]}));c.on("message",raw=>{let m;try{m=JSON.parse(raw)}catch{return}if(typeof m.pin==="string"&&B58.test(m.pin)){if(!watched.has(m.pin))store.saveTracked(m.pin).catch(e=>{st.err="saveTracked: "+e.message});watch(m.pin)}})});
+wss.on("connection",(c,req)=>{c.on("error",()=>{});const free=connLim.acquire(clientIp(req,TRUST));if(!free){c.close(1013,"too many connections");return}c.on("close",free);c.on("error",()=>{});const ip=clientIp(req,TRUST);c.send(JSON.stringify({tracked:[...watched]}));c.on("message",raw=>{if(!msgRL.hit(ip+":m")){c.close(1008,"slow down");return}let m;try{m=JSON.parse(raw)}catch{return}if(typeof m.pin==="string"&&B58.test(m.pin)){if(!watched.has(m.pin))store.saveTracked(m.pin).catch(e=>{st.err="saveTracked: "+e.message});watch(m.pin)}})});
 function watch(w){if(watched.has(w)||watched.size>=50)return;watched.add(w);if(up?.readyState===1)cmd("subscribeAccountTrade",w);if(sw?.readyState===1)subWallet(w)}
 const subWallet=w=>sw.send(JSON.stringify({jsonrpc:"2.0",id:"w"+Math.random(),method:"logsSubscribe",params:[{mentions:[w]},{commitment:"confirmed"}]}));
-const out=(sym,buy,usd,venue,wallet,logo,mint,sig)=>{const e=wallets.get(wallet)||touch(wallet),bot=e.bot,r=bot?-1:pick(e),pool=HUBS.filter(h=>h[3]===r),h=bot?["Bots",0,0,-1]:pool[Math.random()*pool.length|0],
-m=JSON.stringify({sym,buy,usd,venue,city:h[0],lon:h[1],lat:h[2],r,logo:logoUrl(mint,logo),wallet,mint,sig,n:e.n,bot});wss.clients.forEach(c=>c.readyState===1&&c.send(m));st.sent++;store.add({mint,sym,venue,region:r,buy,usd,wallet,sig,bot});store.wallet(wallet,e)};
+const out=(sym0,buy,usd,venue,wallet,logo,mint,sig)=>{const sym=cleanSym(sym0,mint);const e=wallets.get(wallet)||touch(wallet),bot=e.bot,r=bot?-1:pick(e),pool=HUBS.filter(h=>h[3]===r),h=bot?["Bots",0,0,-1]:pool[Math.random()*pool.length|0],
+m=JSON.stringify({sym,buy,usd,venue,city:h[0],lon:h[1],lat:h[2],r,logo:logoUrl(mint,logo),wallet,mint,sig,n:e.n,bot});lastOut=Date.now();wss.clients.forEach(c=>c.readyState===1&&c.bufferedAmount<1e6&&c.send(m));st.sent++;store.add({mint,sym,venue,region:r,buy,usd,wallet,sig,bot});store.wallet(wallet,e)};
 
 // ---- pump.fun via PumpPortal ----
 const meta=new Map(),subs=[];let up,last=0;
@@ -51,14 +56,14 @@ setInterval(()=>{console.log(`[10s] pump msgs ${st.pump} (trades ${st.pumpTrades
 const cmd=(m,k)=>up.readyState===1&&up.send(JSON.stringify({method:m,keys:[k]}));
 async function pLogo(mint){const m=meta.get(mint);if(!m?.uri)return;try{const j=await(await fetch(m.uri,{signal:AbortSignal.timeout(4000)})).json();if(meta.has(mint))m.logo=j.image}catch{}}
 function pump(){up=new WebSocket("wss://pumpportal.fun/api/data");
-up.on("open",()=>{up.send(JSON.stringify({method:"subscribeNewToken"}));watched.forEach(w=>cmd("subscribeAccountTrade",w))});
+up.on("open",()=>{pb=0;up.send(JSON.stringify({method:"subscribeNewToken"}));watched.forEach(w=>cmd("subscribeAccountTrade",w))});
 up.on("message",raw=>{let d;try{d=JSON.parse(raw)}catch{return}st.pump++;if(d.txType!=="create"&&(st.samples=(st.samples||0)+1)<=6)console.log("[pump sample, not a new-token msg]",String(raw).slice(0,400));if(!d.mint)return;
 if(d.txType==="create"){meta.set(d.mint,{sym:d.symbol,uri:d.uri});subs.push(d.mint);
 if(subs.length>3000){meta.delete(subs.shift())}pLogo(d.mint);return}
 if((d.txType!=="buy"&&d.txType!=="sell")||!d.solAmount)return;st.pumpTrades++;touch(d.traderPublicKey);
 const usd=Math.round(d.solAmount*sol),now=Date.now(),pin=watched.has(d.traderPublicKey);if(!pin&&usd<1000&&now-last<200)return;if(!pin)last=now;
 const m=meta.get(d.mint),go=(s,l)=>out("$"+String(s).toUpperCase(),d.txType==="buy",usd,"pump.fun",d.traderPublicKey,l,d.mint,d.signature);if(m)go(m.sym||d.mint.slice(0,4),m.logo);else tokenInfo(d.mint).then(i=>go(i.sym,i.logo))});
-up.on("close",()=>setTimeout(pump,3000));up.on("error",e=>{st.err="pump: "+e.message})}
+up.on("close",()=>setTimeout(pump,backoff(pb++)));up.on("error",e=>{st.err="pump: "+e.message})}
 pump();
 
 // ---- Jupiter / Raydium / Orca / Meteora via Solana RPC ----
@@ -92,7 +97,7 @@ const pumpEvent=b=>b.length>=97&&b.subarray(0,8).equals(TRADE)?{mint:b58(b.subar
 function pumpTrade(e,sig){st.pumpEv++;touch(e.user);const usd=Math.round(e.sol*sol),now=Date.now(),pin=watched.has(e.user);if(usd<1&&!pin)return;if(!pin&&usd<1000&&now-last<35)return;if(!pin)last=now;st.pumpTrades++;
 const m=meta.get(e.mint),go=(sy,l)=>out("$"+String(sy).toUpperCase(),e.buy,usd,"pump.fun",e.user,l,e.mint,sig);const wait=p=>Promise.race([p,new Promise(r=>setTimeout(r,3000))]);if(m)wait(ensureLogo(e.mint,m.logo)).then(()=>go(m.sym||e.mint.slice(0,4),m.logo));else tokenInfo(e.mint).then(i=>wait(ensureLogo(e.mint,i.logo)).then(()=>go(i.sym,i.logo)))}
 const PUMP="6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";let pumpSub;
-function dex(){sw=new WebSocket(WSU);let n=0;pumpSub=undefined;
+function dex(){sw=new WebSocket(WSU);let n=0;sw.on("open",()=>{db0=0});pumpSub=undefined;
 sw.on("open",()=>watched.forEach(w=>subWallet(w)));
 sw.on("open",()=>sw.send(JSON.stringify({jsonrpc:"2.0",id:"pump",method:"logsSubscribe",params:[{mentions:[PUMP]},{commitment:"confirmed"}]})));
 sw.on("open",()=>Object.keys(PROG).forEach(p=>sw.send(JSON.stringify({jsonrpc:"2.0",id:++n,method:"logsSubscribe",params:[{mentions:[p]},{commitment:"confirmed"}]}))));
@@ -103,11 +108,11 @@ if(m.params.subscription===pumpSub){for(const l of v.logs)if(l.startsWith("Progr
 if(wsubs.has(m.params.subscription)){pq.push(v.signature);return} // tracked wallets skip sampling
 if(seen.has(v.signature)||v.logs.length>45||!v.logs.some(l=>/swap|route/i.test(l)))return; // long logs are usually arbitrage bots, which decode to nothing
 seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push({sig:v.signature,t:Date.now()});st.queued++;while(queue.length&&Date.now()-queue[0].t>30000)queue.shift();if(queue.length>3000)queue.shift()});
-const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",()=>{clearInterval(ka);setTimeout(dex,3000)});sw.on("error",e=>{st.err="dex: "+e.message})}
+const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",()=>{clearInterval(ka);setTimeout(dex,backoff(db0++))});sw.on("error",e=>{st.err="dex: "+e.message})}
 if(KEY||process.env.RPC_WS)dex();else console.log("No HELIUS_KEY set: pump.fun only. Add a key to include Jupiter, Raydium, Orca and Meteora.");
 if(store.enabled){setInterval(()=>store.flush(),5000);
 store.loadWallets().then(rows=>{for(const w of rows)if(!wallets.has(w.wallet))wallets.set(w.wallet,{n:w.n,ll:w.ll,hrs:w.hours_mask,t:[],bot:w.bot});console.log("[db] loaded "+rows.length+" wallet profiles")}).catch(e=>console.log("[db] could not load wallets:",e.message));
 store.loadTracked().then(a=>{a.forEach(watch);console.log("[db] loaded "+a.length+" tracked wallets")}).catch(e=>console.log("[db] could not load tracked wallets:",e.message))}
 else console.log("No SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY: history is off (live view still works).");
-const bye=async()=>{console.log("shutting down");await store.flush().catch(()=>{});process.exit(0)};process.on("SIGTERM",bye);process.on("SIGINT",bye);
+let dying=false;const bye=async()=>{if(dying)return;dying=true;console.log("shutting down");server.close();wss.clients.forEach(c=>c.close(1001,"restarting"));await Promise.race([store.flush().catch(()=>{}),new Promise(r=>setTimeout(r,4000))]);process.exit(0)};process.on("SIGTERM",bye);process.on("SIGINT",bye);
 server.listen(PORT,()=>console.log("Trade Globe on http://localhost:"+PORT));
