@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cleanSym, originAllowed, clientIp, createRateLimit, createConnLimit, backoff } from "../lib/limits.js";
+import { safeUrl, cleanSym, originAllowed, clientIp, createRateLimit, createConnLimit, backoff } from "../lib/limits.js";
 
 test("same-site origin is allowed, other sites are blocked, missing origin is allowed", () => {
   assert.equal(originAllowed("https://mob.example.com", "mob.example.com"), true);
@@ -33,4 +33,8 @@ test("backoff grows, caps at 30s, and jitters between 50% and 100%", () => {
 test("token names are cleaned so they cannot inject HTML into the page", () => {
   assert.equal(cleanSym("$bonk"), "$BONK"); assert.equal(cleanSym("<img src=x onerror=alert(1)>"), "$IMGSRCXONERROR");
   assert.ok(!/[<>"'&=]/.test(cleanSym("a\"b'c<d>&e=f"))); assert.equal(cleanSym("", "AbCdEf"), "$ABCD"); assert.equal(cleanSym(undefined, ""), "$?");
+});
+test("only public https hosts are fetched for logos and metadata", () => {
+  for (const ok of ["https://ipfs.io/ipfs/abc", "https://images.pump.fun/x.png"]) assert.equal(safeUrl(ok), true, ok);
+  for (const bad of ["http://ipfs.io/x", "https://127.0.0.1/x", "https://169.254.169.254/latest", "https://localhost/x", "https://metadata/x", "https://svc.internal/x", "https://[::1]/x", "https://a.com:8080/x", "https://u:p@a.com/x", "file:///etc/passwd", "garbage"]) assert.equal(safeUrl(bad), false, bad);
 });

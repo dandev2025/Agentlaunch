@@ -17,12 +17,13 @@ keeps a process alive works (Railway, Render, Fly). Free tiers that sleep when i
 | `SUPABASE_URL` | `https://xxxx.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | your secret key |
 | `DECODE_PER_SEC` | `0.4` (free Helius plan) |
+| `PIN_PASSCODE` | a passcode only you know (needed to track wallets on the live site; without it tracking is OFF for everyone) |
 
 `PORT` is set by the host. `ALLOWED_ORIGINS` is only needed if another website embeds the globe (the relay's own page is always allowed).
 
 ## What protects it
 Only the relay's own site can open the WebSocket; 8 connections and 10 messages/10s per IP; 120 HTTP API calls/min per IP;
-2 KB message cap; slow clients are skipped; token names are sanitised; upstream reconnects back off with jitter; SIGTERM
+2 KB message cap; slow clients are skipped; token names are sanitised; logo/metadata links must be public https hosts (no internal addresses); logos are served as raster images only; wallet tracking needs your passcode (6 wrong tries per hour per IP); upstream reconnects back off with jitter; SIGTERM
 flushes the database before exiting. Secrets exist only in the host's environment.
 
 ## Cost note

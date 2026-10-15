@@ -34,3 +34,12 @@ export const cleanSym = (s, mint = "") => {
   const body = String(s ?? "").replace(/^\$+/, "").replace(/[^\p{L}\p{N}._-]/gu, "").slice(0, 14);
   return "$" + (body || String(mint).slice(0, 4) || "?").toUpperCase();
 };
+// Logo/metadata links are chosen by token creators. Only fetch public https hosts (no IPs, localhost or internal names).
+export function safeUrl(u) {
+  try {
+    const x = new URL(u); const h = x.hostname.toLowerCase();
+    if (x.protocol !== "https:" || x.port && x.port !== "443" || x.username || x.password) return false;
+    if (/^[\d.]+$/.test(h) || h.includes(":") || h === "localhost" || !h.includes(".")) return false;
+    return !/\.(local|internal|lan|home|localdomain|corp)$/.test(h);
+  } catch { return false; }
+}
