@@ -70,7 +70,7 @@ test("totals() sums the daily rows and passes the launch date as the start", asy
 test("a wrong SUPABASE_URL that returns a web page gives a readable error, not a JSON crash", async () => {
   const fetchFn = async () => ({ ok: true, status: 200, text: async () => "<!DOCTYPE html><html>Not the API</html>", json: async () => { throw new Error("Unexpected token <") } });
   const s = createStore({ url: "https://x.supabase.co", key: "K", fetchFn, log: () => {} });
-  await assert.rejects(() => s.totals(), /not JSON \(wrong SUPABASE_URL\?\)/);
+  await assert.rejects(() => s.totals(), /not JSON \(wrong SUPABASE_URL\? calling host: x\.supabase\.co\)/);
 });
 test("SUPABASE_URL pasted with /rest/v1/ on the end, or spaces, still hits the right address", async () => {
   for (const u of ["https://x.supabase.co/rest/v1/", "https://x.supabase.co/rest/v1", " https://x.supabase.co/ ", "https://x.supabase.co"]) {
