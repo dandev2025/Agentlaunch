@@ -18,6 +18,7 @@ keeps a process alive works (Railway, Render, Fly). Free tiers that sleep when i
 | `SUPABASE_SERVICE_ROLE_KEY` | your secret key |
 | `DECODE_PER_SEC` | `0.4` (free Helius plan) |
 | `LAUNCH_DATE` | your official start, e.g. `2026-10-16T00:00:00Z`. Nothing is counted before it. Leave unset to count from the first saved trade |
+| `DEX_FEEDS` | leave UNSET. Setting it to `1` also listens to Jupiter/Raydium/Orca/Meteora, which streams about 1 MB/s and uses roughly 1.7M Helius credits a day |
 | `PIN_PASSCODE` | a passcode only you know (needed to track wallets on the live site; without it tracking is OFF for everyone) |
 
 `PORT` is set by the host. `ALLOWED_ORIGINS` is only needed if another website embeds the globe (the relay's own page is always allowed).
@@ -46,3 +47,8 @@ fly status
 curl https://YOUR-UNIQUE-NAME.fly.dev/healthz
 ```
 Keep exactly ONE machine running (`fly scale count 1`): two copies would double-count trades.
+
+## Helius credits (read this)
+Helius meters live websocket data at 2 credits per 0.1 MB (checked on helius.dev/docs, 15 Oct 2026). Free = 1M credits/month, Developer ($49/mo) = 10M.
+The pump.fun-only feed is roughly 100 KB/s, about 5-6M credits a month, so it needs the Developer plan. Turning on `DEX_FEEDS=1` multiplies that by about 8 and will drain even the Developer plan in days.
+When credits run out Helius answers "max usage reached" and the live feed goes silent. Set a usage alert in the Helius dashboard.
