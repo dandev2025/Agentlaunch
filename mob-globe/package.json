@@ -1,0 +1,1 @@
+{"name":"trade-globe-live","type":"module","scripts":{"start":"node server.js"},"dependencies":{"ws":"^8.18.0"}}

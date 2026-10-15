@@ -1,0 +1,3 @@
+Read CLAUDE.md in this folder first. It is the full brief for the MemeMobbing "Mob Globe": a live visual tracker of Solana buys and sells on a 3D globe. Follow its hard rules (visual tracker only, regions are labelled estimates, secrets only in server .env, use the supplied artwork unchanged).
+
+The code was written without internet access, so the live data path has never been run. Start with task 1 in the task list: install, run it with my Helius key from .env, get the badge from DEMO to LIVE, and fix whatever breaks. Show me what you changed and how it behaves, then move on to the Supabase persistence step. Ask before running anything destructive or anything that needs a key I haven't put in .env.
