@@ -50,7 +50,9 @@ export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = c
       log("[store] write failed, will retry:", e.message);
     } finally { busy = false }
   }
-  const get = async path => (await call(path, { headers: hdr({}) })).json();
+  // Parse JSON ourselves so a wrong SUPABASE_URL (which returns a web page) gives a readable error
+  const parse = async (r, what) => { const t = await r.text(); try { return JSON.parse(t); } catch { throw new Error(`${what}: HTTP ${r.status} and not JSON (wrong SUPABASE_URL?): ${t.slice(0, 60).replace(/\s+/g, " ")}`); } };
+  const get = async path => parse(await call(path, { headers: hdr({}) }), path.split("?")[0]);
   return {
     enabled, add, wallet, flush, stat, pending: () => ({ buckets: buckets.size, bigs: bigs.length, wallets: dirty.size }),
     loadTracked: async () => enabled ? (await get("tracked_wallets?select=addr&limit=200")).map(r => r.addr) : [],
@@ -59,8 +61,8 @@ export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = c
     // Totals since the launch date (or since the first saved row when no launch date is set)
     totals: async () => {
       const since = new Date(launch || 0).toISOString();
-      const rows = await (await call("rpc/flow_agg", { method: "POST", headers: hdr({}), body: JSON.stringify({ since, unit: "day" }) })).json();
-      const top = await (await call("rpc/flow_top", { method: "POST", headers: hdr({}), body: JSON.stringify({ since, n: 10 }) })).json();
+      const rows = await parse(await call("rpc/flow_agg", { method: "POST", headers: hdr({}), body: JSON.stringify({ since, unit: "day" }) }), "rpc/flow_agg");
+      const top = await parse(await call("rpc/flow_top", { method: "POST", headers: hdr({}), body: JSON.stringify({ since, n: 10 }) }), "rpc/flow_top");
       return { since: launch ? new Date(launch).toISOString() : null, firstData: rows[0]?.t || null,
         buy: rows.reduce((a, r) => a + +r.buy, 0), sell: rows.reduce((a, r) => a + +r.sell, 0), trades: rows.reduce((a, r) => a + +r.trades, 0),
         top: top.map(x => ({ mint: x.mint, sym: x.sym, buy: +x.buy, sell: +x.sell, trades: +x.trades })) };
@@ -68,7 +70,7 @@ export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = c
     flow: async range => {
       const hours = { "24h": 24, "7d": 168, "30d": 720 }[range]; if (!hours) throw new Error("bad range");
       const r = await call("rpc/flow_agg", { method: "POST", headers: hdr({}), body: JSON.stringify({ since: new Date(now() - hours * 3600e3).toISOString(), unit: range === "24h" ? "hour" : "day" }) });
-      return (await r.json()).map(x => ({ t: x.t, buy: +x.buy, sell: +x.sell, trades: +x.trades }));
+      return (await parse(r, "rpc/flow_agg")).map(x => ({ t: x.t, buy: +x.buy, sell: +x.sell, trades: +x.trades }));
     },
   };
 }

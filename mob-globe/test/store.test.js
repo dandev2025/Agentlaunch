@@ -66,3 +66,8 @@ test("totals() sums the daily rows and passes the launch date as the start", asy
   const r = await s.totals(); assert.deepEqual([r.buy, r.sell, r.trades], [11.5, 4.5, 5]); assert.equal(r.since, "2026-10-16T00:00:00.000Z"); assert.equal(r.top[0].sym, "$A");
   assert.equal(calls[0].b.since, "2026-10-16T00:00:00.000Z");
 });
+test("a wrong SUPABASE_URL that returns a web page gives a readable error, not a JSON crash", async () => {
+  const fetchFn = async () => ({ ok: true, status: 200, text: async () => "<!DOCTYPE html><html>Not the API</html>", json: async () => { throw new Error("Unexpected token <") } });
+  const s = createStore({ url: "https://x.supabase.co", key: "K", fetchFn, log: () => {} });
+  await assert.rejects(() => s.totals(), /not JSON \(wrong SUPABASE_URL\?\)/);
+});
