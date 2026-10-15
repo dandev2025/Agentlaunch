@@ -4,10 +4,12 @@ export function originAllowed(origin, host, allowed = []) {
   if (!origin) return true; // non-browser clients (health checks, curl) send none
   try { const u = new URL(origin); return u.host === host || allowed.includes(origin) || allowed.includes(u.host); } catch { return false; }
 }
-// Client IP as seen by the platform's proxy: the LAST X-Forwarded-For entry (earlier ones can be forged by the client).
+// Client IP: the FIRST X-Forwarded-For entry (the visitor). The last entry is the platform's own proxy and would be
+// shared by everybody, so per-visitor limits would hit all visitors at once. A forged value only lets someone dodge their own
+// per-IP limit, so there is also a global connection cap in the relay.
 export function clientIp(req, trustProxy = true) {
   const xff = trustProxy && req.headers["x-forwarded-for"];
-  if (xff) { const p = String(xff).split(",").map(s => s.trim()).filter(Boolean); if (p.length) return p[p.length - 1]; }
+  if (xff) { const p = String(xff).split(",").map(s => s.trim()).filter(Boolean); if (p.length) return p[0]; }
   return req.socket?.remoteAddress || "unknown";
 }
 // Fixed-window counter: hit(key) is false once a key exceeds max within windowMs.

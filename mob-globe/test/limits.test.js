@@ -13,8 +13,8 @@ test("extra origins can be allowed by full origin or host", () => {
   assert.equal(originAllowed("https://other.app", "mob.example.com", ["other.app"]), true);
   assert.equal(originAllowed("https://x.app", "mob.example.com", ["https://other.app"]), false);
 });
-test("client ip is the last forwarded entry (first can be forged)", () => {
-  assert.equal(clientIp({ headers: { "x-forwarded-for": "6.6.6.6, 1.2.3.4" }, socket: { remoteAddress: "10.0.0.1" } }), "1.2.3.4");
+test("client ip is the visitor (first forwarded entry), not the shared platform proxy", () => {
+  assert.equal(clientIp({ headers: { "x-forwarded-for": "1.2.3.4, 10.9.9.9" }, socket: { remoteAddress: "10.0.0.1" } }), "1.2.3.4");
   assert.equal(clientIp({ headers: {}, socket: { remoteAddress: "10.0.0.1" } }), "10.0.0.1");
   assert.equal(clientIp({ headers: { "x-forwarded-for": "6.6.6.6" }, socket: { remoteAddress: "10.0.0.1" } }, false), "10.0.0.1");
 });
