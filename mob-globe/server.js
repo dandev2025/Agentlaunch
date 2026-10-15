@@ -82,7 +82,7 @@ setInterval(()=>{const i=queue.findLastIndex(x=>Date.now()-x.t>3000);if(i<0)retu
 const B58A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz",TRADE=Buffer.from("bddb7fd34ee661ee","hex");
 const b58=u=>{let n=0n;for(const x of u)n=n*256n+BigInt(x);let o="";while(n>0n){o=B58A[Number(n%58n)]+o;n/=58n}for(const x of u){if(x)break;o="1"+o}return o};
 const pumpEvent=b=>b.length>=97&&b.subarray(0,8).equals(TRADE)?{mint:b58(b.subarray(8,40)),sol:Number(b.readBigUInt64LE(40))/1e9,buy:b[56]===1,user:b58(b.subarray(57,89))}:null; // pump.fun TradeEvent from "Program data:" log lines
-function pumpTrade(e,sig){st.pumpEv++;touch(e.user);const usd=Math.round(e.sol*sol),now=Date.now(),pin=watched.has(e.user);if(usd<1&&!pin)return;if(!pin&&usd<1000&&now-last<100)return;if(!pin)last=now;st.pumpTrades++;
+function pumpTrade(e,sig){st.pumpEv++;touch(e.user);const usd=Math.round(e.sol*sol),now=Date.now(),pin=watched.has(e.user);if(usd<1&&!pin)return;if(!pin&&usd<1000&&now-last<35)return;if(!pin)last=now;st.pumpTrades++;
 const m=meta.get(e.mint),go=(sy,l)=>out("$"+String(sy).toUpperCase(),e.buy,usd,"pump.fun",e.user,l,e.mint,sig);if(m)go(m.sym||e.mint.slice(0,4),m.logo);else tokenInfo(e.mint).then(i=>go(i.sym,i.logo))}
 const PUMP="6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";let pumpSub;
 function dex(){sw=new WebSocket(WSU);let n=0;pumpSub=undefined;
@@ -92,9 +92,10 @@ sw.on("open",()=>Object.keys(PROG).forEach(p=>sw.send(JSON.stringify({jsonrpc:"2
 sw.on("message",raw=>{let m;try{m=JSON.parse(raw)}catch{return}
 if(m.id==="pump"&&m.result!=null)pumpSub=m.result;else if(typeof m.id==="string"&&m.id[0]==="w"&&m.result!=null)wsubs.add(m.result);
 if(m.error)st.err=JSON.stringify(m.error).slice(0,200);const v=m.params?.result?.value;if(!v||v.err)return;st.logs++;
-if(m.params.subscription===pumpSub){for(const l of v.logs)if(l.startsWith("Program data: ")){try{const buf=Buffer.from(l.slice(14),"base64"),e=pumpEvent(buf);if(e)pumpTrade(e,v.signature);else if((st.unk=(st.unk||0)+1)<=5)console.log("[pump log, unrecognised]",buf.length,"bytes, starts",buf.subarray(0,8).toString("hex"))}catch{}}return}
+if(m.params.subscription===pumpSub){for(const l of v.logs)if(l.startsWith("Program data: ")){try{const buf=Buffer.from(l.slice(14),"base64"),e=pumpEvent(buf);if(e)pumpTrade(e,v.signature);else if((st.unk=(st.unk||0)+1)<=0)console.log("[pump log, unrecognised]",buf.length,"bytes, starts",buf.subarray(0,8).toString("hex"))}catch{}}return}
 if(wsubs.has(m.params.subscription)){pq.push(v.signature);return} // tracked wallets skip sampling
-if(seen.has(v.signature)||!v.logs.some(l=>/swap|route/i.test(l)))return;seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push({sig:v.signature,t:Date.now()});st.queued++;while(queue.length&&Date.now()-queue[0].t>30000)queue.shift();if(queue.length>3000)queue.shift()});
+if(seen.has(v.signature)||v.logs.length>45||!v.logs.some(l=>/swap|route/i.test(l)))return; // long logs are usually arbitrage bots, which decode to nothing
+seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push({sig:v.signature,t:Date.now()});st.queued++;while(queue.length&&Date.now()-queue[0].t>30000)queue.shift();if(queue.length>3000)queue.shift()});
 const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",()=>{clearInterval(ka);setTimeout(dex,3000)});sw.on("error",e=>{st.err="dex: "+e.message})}
 if(KEY||process.env.RPC_WS)dex();else console.log("No HELIUS_KEY set: pump.fun only. Add a key to include Jupiter, Raydium, Orca and Meteora.");
 server.listen(PORT,()=>console.log("Trade Globe on http://localhost:"+PORT));
