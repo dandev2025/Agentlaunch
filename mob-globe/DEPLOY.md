@@ -29,3 +29,18 @@ flushes the database before exiting. Secrets exist only in the host's environmen
 
 ## Cost note
 Helius and Supabase free tiers are used as-is. The host itself usually costs a few dollars a month for always-on. Check the current price.
+
+## Fly.io (cheapest always-on option)
+Files are ready: `Dockerfile`, `fly.toml`. Run these in Terminal inside the `mob-globe` folder (needs a Fly account with a card):
+```
+brew install flyctl          # or see fly.io/docs/flyctl/install
+fly auth login
+# edit fly.toml: change app = "mob-globe-CHANGE-ME" to a unique name
+fly launch --no-deploy --copy-config --name YOUR-UNIQUE-NAME
+# load secrets straight from your .env without printing them (add PIN_PASSCODE and LAUNCH_DATE to .env first):
+grep -E '^(HELIUS_KEY|SUPABASE_URL|SUPABASE_SERVICE_ROLE_KEY|DECODE_PER_SEC|PIN_PASSCODE|LAUNCH_DATE)=' .env | fly secrets import
+fly deploy
+fly status
+curl https://YOUR-UNIQUE-NAME.fly.dev/healthz
+```
+Keep exactly ONE machine running (`fly scale count 1`): two copies would double-count trades.
