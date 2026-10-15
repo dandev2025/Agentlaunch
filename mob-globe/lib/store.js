@@ -52,7 +52,7 @@ export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = c
     } finally { busy = false }
   }
   // Parse JSON ourselves so a wrong SUPABASE_URL (which returns a web page) gives a readable error
-  const parse = async (r, what) => { const t = await r.text(); try { return JSON.parse(t); } catch { throw new Error(`${what}: HTTP ${r.status} and not JSON (wrong SUPABASE_URL?): ${t.slice(0, 60).replace(/\s+/g, " ")}`); } };
+  const parse = async (r, what) => { const t = await r.text(); try { return JSON.parse(t); } catch { throw new Error(`${what}: HTTP ${r.status} and not JSON (wrong SUPABASE_URL?): ${t.slice(0, 60).replace(/\s+/g, " ").replace(/</g, "‹").replace(/>/g, "›")}`); } };
   const get = async path => parse(await call(path, { headers: hdr({}) }), path.split("?")[0]);
   return {
     enabled, add, wallet, flush, stat, pending: () => ({ buckets: buckets.size, bigs: bigs.length, wallets: dirty.size }),
