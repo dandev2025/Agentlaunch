@@ -28,21 +28,22 @@ wss.on("connection",c=>c.on("message",raw=>{let m;try{m=JSON.parse(raw)}catch{re
 function watch(w){if(watched.has(w)||watched.size>=50)return;watched.add(w);if(up?.readyState===1)cmd("subscribeAccountTrade",w);if(sw?.readyState===1)subWallet(w)}
 const subWallet=w=>sw.send(JSON.stringify({jsonrpc:"2.0",id:"w"+Math.random(),method:"logsSubscribe",params:[{mentions:[w]},{commitment:"confirmed"}]}));
 const out=(sym,buy,usd,venue,wallet,logo,mint,sig)=>{const e=wallets.get(wallet)||touch(wallet),bot=e.bot,r=bot?-1:pick(e),pool=HUBS.filter(h=>h[3]===r),h=bot?["Bots",0,0,-1]:pool[Math.random()*pool.length|0],
-m=JSON.stringify({sym,buy,usd,venue,city:h[0],lon:h[1],lat:h[2],r,logo,wallet,mint,sig,n:e.n,bot});wss.clients.forEach(c=>c.readyState===1&&c.send(m))};
+m=JSON.stringify({sym,buy,usd,venue,city:h[0],lon:h[1],lat:h[2],r,logo,wallet,mint,sig,n:e.n,bot});wss.clients.forEach(c=>c.readyState===1&&c.send(m));st.sent++};
 
 // ---- pump.fun via PumpPortal ----
-const meta=new Map(),subs=[];let up,last=0;
+const meta=new Map(),subs=[];let up,last=0;const st={pump:0,pumpTrades:0,logs:0,queued:0,decoded:0,sent:0,err:""};
+setInterval(()=>{console.log(`[10s] pump msgs ${st.pump} (trades ${st.pumpTrades}) | dex logs ${st.logs} queued ${st.queued} decoded ${st.decoded} | sent to browsers ${st.sent} | pump ${up?.readyState===1?"up":"DOWN"} dex ${sw?.readyState===1?"up":"DOWN"} | clients ${wss.clients.size}${st.err?" | last error: "+st.err:""}`);for(const k of ["pump","pumpTrades","logs","queued","decoded","sent"])st[k]=0;st.err=""},10000);
 const cmd=(m,k)=>up.readyState===1&&up.send(JSON.stringify({method:m,keys:[k]}));
 async function pLogo(mint){const m=meta.get(mint);if(!m?.uri)return;try{const j=await(await fetch(m.uri,{signal:AbortSignal.timeout(4000)})).json();if(meta.has(mint))m.logo=j.image}catch{}}
 function pump(){up=new WebSocket("wss://pumpportal.fun/api/data");
 up.on("open",()=>{up.send(JSON.stringify({method:"subscribeNewToken"}));subs.forEach(k=>cmd("subscribeTokenTrade",k));watched.forEach(w=>cmd("subscribeAccountTrade",w))});
-up.on("message",raw=>{let d;try{d=JSON.parse(raw)}catch{return}if(!d.mint)return;
+up.on("message",raw=>{let d;try{d=JSON.parse(raw)}catch{return}st.pump++;if(!d.mint)return;
 if(d.txType==="create"){meta.set(d.mint,{sym:d.symbol,uri:d.uri});subs.push(d.mint);cmd("subscribeTokenTrade",d.mint);
 if(subs.length>300){const o=subs.shift();cmd("unsubscribeTokenTrade",o);meta.delete(o)}pLogo(d.mint);return}
-if((d.txType!=="buy"&&d.txType!=="sell")||!d.solAmount)return;touch(d.traderPublicKey);
+if((d.txType!=="buy"&&d.txType!=="sell")||!d.solAmount)return;st.pumpTrades++;touch(d.traderPublicKey);
 const usd=Math.round(d.solAmount*sol),now=Date.now(),pin=watched.has(d.traderPublicKey);if(!pin&&usd<1000&&now-last<200)return;if(!pin)last=now;
 const m=meta.get(d.mint),go=(s,l)=>out("$"+String(s).toUpperCase(),d.txType==="buy",usd,"pump.fun",d.traderPublicKey,l,d.mint,d.signature);if(m)go(m.sym||d.mint.slice(0,4),m.logo);else tokenInfo(d.mint).then(i=>go(i.sym,i.logo))});
-up.on("close",()=>setTimeout(pump,3000));up.on("error",()=>{})}
+up.on("close",()=>setTimeout(pump,3000));up.on("error",e=>{st.err="pump: "+e.message})}
 pump();
 
 // ---- Jupiter / Raydium / Orca / Meteora via Solana RPC ----
@@ -64,17 +65,17 @@ const q=((m.postBalances[0]-m.preBalances[0]+m.fee)/1e9+(d.get(WSOL)||0))*sol+(d
 let mint,amt=0;for(const[k,v]of d)if(k!==WSOL&&k!==USDC&&Math.abs(v)>Math.abs(amt)){mint=k;amt=v}
 if(!mint)return;const buy=amt>0,usd=Math.round(Math.abs(q));if((buy&&q>=0)||(!buy&&q<=0)||usd<10)return; // token-for-token swaps skipped
 const venue=keys.map(k=>PROG[k]).sort((a,b)=>(b==="Jupiter")-(a==="Jupiter")).find(Boolean)||"DEX",i=await tokenInfo(mint);
-touch(signer);out("$"+String(i.sym).toUpperCase(),buy,usd,venue,signer,i.logo,mint,sig)}
+st.decoded++;touch(signer);out("$"+String(i.sym).toUpperCase(),buy,usd,venue,signer,i.logo,mint,sig)}
 setInterval(()=>{while(pq.length)decode(pq.shift()).catch(()=>{})},300); // tracked wallets: always decoded
-setInterval(()=>{const s=queue.pop();if(s)decode(s).catch(()=>{})},1000/(+process.env.DECODE_PER_SEC||0.4)); // sampled swaps, newest first. Each decode = 1 Helius credit
+setInterval(()=>{const s=queue.pop();if(s)decode(s).catch(e=>{st.err="decode: "+e.message})},1000/(+process.env.DECODE_PER_SEC||0.4)); // sampled swaps, newest first. Each decode = 1 Helius credit
 function dex(){sw=new WebSocket(WSU);let n=0;
 sw.on("open",()=>watched.forEach(w=>subWallet(w)));
 sw.on("open",()=>Object.keys(PROG).forEach(p=>sw.send(JSON.stringify({jsonrpc:"2.0",id:++n,method:"logsSubscribe",params:[{mentions:[p]},{commitment:"confirmed"}]}))));
 sw.on("message",raw=>{let m;try{m=JSON.parse(raw)}catch{return}
 if(typeof m.id==="string"&&m.id[0]==="w"&&m.result!=null)wsubs.add(m.result);
-const v=m.params?.result?.value;if(!v||v.err)return;
+if(m.error)st.err=JSON.stringify(m.error).slice(0,200);const v=m.params?.result?.value;if(!v||v.err)return;st.logs++;
 if(wsubs.has(m.params.subscription)){pq.push(v.signature);return} // tracked wallets skip sampling
-if(seen.has(v.signature)||!v.logs.some(l=>/swap|route/i.test(l)))return;seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push(v.signature);if(queue.length>40)queue.shift()});
-const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",()=>{clearInterval(ka);setTimeout(dex,3000)});sw.on("error",()=>{})}
+if(seen.has(v.signature)||!v.logs.some(l=>/swap|route/i.test(l)))return;seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push(v.signature);st.queued++;if(queue.length>40)queue.shift()});
+const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",()=>{clearInterval(ka);setTimeout(dex,3000)});sw.on("error",e=>{st.err="dex: "+e.message})}
 if(KEY||process.env.RPC_WS)dex();else console.log("No HELIUS_KEY set: pump.fun only. Add a key to include Jupiter, Raydium, Orca and Meteora.");
 server.listen(PORT,()=>console.log("Trade Globe on http://localhost:"+PORT));
