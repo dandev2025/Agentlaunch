@@ -47,7 +47,9 @@ canvas{display:block;width:100%;touch-action:none;cursor:grab;user-select:none;-
 button.live{color:var(--fg);font-family:inherit;cursor:pointer}
 .cmui,.cmx{display:none}body.cm{overflow:hidden}body.cm .wrap>:not(.hero){display:none!important}body.cm .wrap{padding:0;max-width:none}body.cm .tag{display:none}
 body.cm .hero{position:fixed;inset:0;z-index:40;border-radius:0;border:0;height:100dvh}body.cm .tools,body.cm .note,body.cm .leg{display:none}
-body.cm .mob{left:auto;right:6px;height:20%;max-height:150px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);transform:scaleX(-1)}
+body.cm .mob{left:auto;right:6px;height:20%;max-height:150px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);transform:scaleX(-1);animation:mobspin 9s linear infinite}
+@keyframes mobspin{from{transform:perspective(700px) rotateY(180deg)}to{transform:perspective(700px) rotateY(540deg)}}
+@media (prefers-reduced-motion:reduce){body.cm .mob{animation:none;transform:scaleX(-1)}}
 body.cm .cmui{display:flex;flex-direction:column;position:absolute;inset:0;padding:calc(env(safe-area-inset-top,0px) + 18px) 16px calc(env(safe-area-inset-bottom,0px) + 22px);pointer-events:none}
 .cmtop{display:flex;align-items:center;gap:10px}.cmlogo{height:54px}.cmtop b{display:block;font:400 28px/1 "Permanent Marker",Impact,sans-serif;color:#ff6a13;text-shadow:2px 2px 0 #000,0 0 18px rgba(255,106,19,.5)}.cmtop small{color:#ffd9b8;letter-spacing:.2em;font-size:11px;font-weight:700}
 .cmstats{display:flex;gap:22px;align-items:flex-end;margin-top:auto;margin-bottom:12px}.cmstats small{display:block;color:#c9a78c;font-size:11px;letter-spacing:.14em;font-weight:700}.cmstats b{font:800 32px ui-monospace,Menlo,monospace;color:#fff;text-shadow:0 0 18px rgba(255,106,19,.55)}.cmstats b.b{color:var(--buy)}.cmstats b.s{color:var(--sell)}
