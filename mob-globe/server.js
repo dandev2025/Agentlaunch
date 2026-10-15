@@ -2,6 +2,7 @@
 // Run: HELIUS_KEY=yourkey npm start   (Node 18+) then open http://localhost:8080
 import http from "node:http";import fs from "node:fs";import path from "node:path";import {fileURLToPath} from "node:url";
 import WebSocket,{WebSocketServer} from "ws";
+import {createStore} from "./lib/store.js";
 const PORT=process.env.PORT||8080,KEY=process.env.HELIUS_KEY,dir=path.dirname(fileURLToPath(import.meta.url));
 const WSU=process.env.RPC_WS||`wss://mainnet.helius-rpc.com/?api-key=${KEY}`,HTTP=process.env.RPC_HTTP||`https://mainnet.helius-rpc.com/?api-key=${KEY}`;
 const HUBS=[["New York",-74,40.7,0],["Miami",-80,25.8,0],["San Francisco",-122,37.8,0],["Toronto",-79,43.7,0],["Sao Paulo",-46.6,-23.5,0],
@@ -11,6 +12,7 @@ const CEN=[-80,10,105];
 const act=(r,h)=>{const l=(h+CEN[r]/15+24)%24;return .15+.85*Math.max(0,Math.cos((l-15)/24*2*Math.PI))};
 // Wallet stats. Region = naive-Bayes over trading hours (1-2 trades = weighted guess, 3+ = best match).
 // Bot rule: 8+ trades inside 60s, or 15+ trades spread over 16+ UTC hours. Bots are not given a location.
+const store=createStore({url:process.env.SUPABASE_URL,key:process.env.SUPABASE_SERVICE_ROLE_KEY}),flowCache=new Map();
 const wallets=new Map(),bits=x=>{let c=0;while(x){c+=x&1;x>>=1}return c};
 function touch(w){const now=Date.now(),h=new Date(now).getUTCHours();let e=wallets.get(w);if(!e)e={n:0,ll:[0,0,0],hrs:0,t:[],bot:false};
 for(let r=0;r<3;r++)e.ll[r]+=Math.log(act(r,h));e.n++;e.hrs|=1<<h;e.t.push(now);if(e.t.length>8)e.t.shift();
@@ -32,20 +34,20 @@ if(mint.endsWith("pump"))c.push(`https://images.pump.fun/coin-image/${mint}?imag
 c.push(`https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png`);
 let why="";for(const x of c){try{logoBuf.set(mint,await grab(x));if(logoBuf.size>800)logoBuf.delete(logoBuf.keys().next().value);st.logoOk++;return}catch(e){why=`${new URL(x).host}: ${e.message}`}}
 st.logoFail++;st.logoWhy=why;logoFail.set(mint,Date.now())})().catch(()=>{}).finally(()=>logoP.delete(mint));logoP.set(mint,p);return p}
-const server=http.createServer((q,r)=>{try{const lm=q.url.match(/^\/logo\/([1-9A-HJ-NP-Za-km-z]{32,44})$/);if(lm){const e=logoBuf.get(lm[1]);if(!e){r.writeHead(404);return r.end()}r.writeHead(200,{"content-type":e.ct,"cache-control":"public,max-age=86400"});return r.end(e.b)}r.writeHead(200,{"content-type":"text/html"});r.end(fs.readFileSync(path.join(dir,"index.html")))}catch{r.writeHead(404);r.end()}});
+const server=http.createServer((q,r)=>{try{const fm=q.url.match(/^\/api\/flow\?range=(24h|7d|30d)$/);if(!fm&&q.url.startsWith("/api/")){r.writeHead(400);return r.end()}if(fm){const send=(c,o)=>{r.writeHead(c,{"content-type":"application/json","cache-control":"no-store"});r.end(JSON.stringify(o))};if(!store.enabled)return send(503,{error:"database not configured"});const hit=flowCache.get(fm[1]);if(hit&&Date.now()-hit.t<30000)return send(200,hit.d);store.flow(fm[1]).then(d=>{flowCache.set(fm[1],{t:Date.now(),d});send(200,d)}).catch(e=>{st.err="flow: "+e.message;send(502,{error:"query failed"})});return}const lm=q.url.match(/^\/logo\/([1-9A-HJ-NP-Za-km-z]{32,44})$/);if(lm){const e=logoBuf.get(lm[1]);if(!e){r.writeHead(404);return r.end()}r.writeHead(200,{"content-type":e.ct,"cache-control":"public,max-age=86400"});return r.end(e.b)}r.writeHead(200,{"content-type":"text/html"});r.end(fs.readFileSync(path.join(dir,"index.html")))}catch{r.writeHead(404);r.end()}});
 const wss=new WebSocketServer({server,path:"/stream"});
 // Tracked wallets: browsers send {pin:"<address>"}; the server then follows every trade from that wallet (no sampling)
 const watched=new Set(),B58=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-wss.on("connection",c=>c.on("message",raw=>{let m;try{m=JSON.parse(raw)}catch{return}if(typeof m.pin==="string"&&B58.test(m.pin))watch(m.pin)}));
+wss.on("connection",c=>{c.send(JSON.stringify({tracked:[...watched]}));c.on("message",raw=>{let m;try{m=JSON.parse(raw)}catch{return}if(typeof m.pin==="string"&&B58.test(m.pin)){if(!watched.has(m.pin))store.saveTracked(m.pin).catch(e=>{st.err="saveTracked: "+e.message});watch(m.pin)}})});
 function watch(w){if(watched.has(w)||watched.size>=50)return;watched.add(w);if(up?.readyState===1)cmd("subscribeAccountTrade",w);if(sw?.readyState===1)subWallet(w)}
 const subWallet=w=>sw.send(JSON.stringify({jsonrpc:"2.0",id:"w"+Math.random(),method:"logsSubscribe",params:[{mentions:[w]},{commitment:"confirmed"}]}));
 const out=(sym,buy,usd,venue,wallet,logo,mint,sig)=>{const e=wallets.get(wallet)||touch(wallet),bot=e.bot,r=bot?-1:pick(e),pool=HUBS.filter(h=>h[3]===r),h=bot?["Bots",0,0,-1]:pool[Math.random()*pool.length|0],
-m=JSON.stringify({sym,buy,usd,venue,city:h[0],lon:h[1],lat:h[2],r,logo:logoUrl(mint,logo),wallet,mint,sig,n:e.n,bot});wss.clients.forEach(c=>c.readyState===1&&c.send(m));st.sent++};
+m=JSON.stringify({sym,buy,usd,venue,city:h[0],lon:h[1],lat:h[2],r,logo:logoUrl(mint,logo),wallet,mint,sig,n:e.n,bot});wss.clients.forEach(c=>c.readyState===1&&c.send(m));st.sent++;store.add({mint,sym,venue,region:r,buy,usd,wallet,sig,bot});store.wallet(wallet,e)};
 
 // ---- pump.fun via PumpPortal ----
 const meta=new Map(),subs=[];let up,last=0;
 const st={logoOk:0,logoFail:0,logoWhy:"",pumpEv:0,pump:0,pumpTrades:0,logs:0,queued:0,decoded:0,sent:0,err:"",tried:0,rpcErr:0,noTx:0,failedTx:0,noMint:0,swapSkip:0,small:0};
-setInterval(()=>{console.log(`[10s] pump msgs ${st.pump} (trades ${st.pumpTrades}) | dex logs ${st.logs} queued ${st.queued} tried ${st.tried} (rpcErr ${st.rpcErr} notFound ${st.noTx} failedTx ${st.failedTx} noMint ${st.noMint} tokenForToken ${st.swapSkip} small ${st.small}) decoded ${st.decoded} | sent to browsers ${st.sent} | pump.fun on-chain events ${st.pumpEv} | logos ok ${st.logoOk} failed ${st.logoFail} (${logoBuf.size} cached)${st.logoWhy?" last fail: "+st.logoWhy:""} | pump ${up?.readyState===1?"up":"DOWN"} dex ${sw?.readyState===1?"up":"DOWN"} | clients ${wss.clients.size}${st.err?" | last error: "+st.err:""}`);for(const k of ["logoOk","logoFail","pumpEv","pump","pumpTrades","logs","queued","decoded","sent","tried","rpcErr","noTx","failedTx","noMint","swapSkip","small"])st[k]=0;st.err=""},10000);
+setInterval(()=>{console.log(`[10s] pump msgs ${st.pump} (trades ${st.pumpTrades}) | dex logs ${st.logs} queued ${st.queued} tried ${st.tried} (rpcErr ${st.rpcErr} notFound ${st.noTx} failedTx ${st.failedTx} noMint ${st.noMint} tokenForToken ${st.swapSkip} small ${st.small}) decoded ${st.decoded} | sent to browsers ${st.sent} | pump.fun on-chain events ${st.pumpEv} | logos ok ${st.logoOk} failed ${st.logoFail} (${logoBuf.size} cached)${st.logoWhy?" last fail: "+st.logoWhy:""} | db ${store.enabled?`${store.stat.flushed} rows saved, ${store.stat.failures} failed`:"off"} | pump ${up?.readyState===1?"up":"DOWN"} dex ${sw?.readyState===1?"up":"DOWN"} | clients ${wss.clients.size}${st.err?" | last error: "+st.err:""}`);for(const k of ["logoOk","logoFail","pumpEv","pump","pumpTrades","logs","queued","decoded","sent","tried","rpcErr","noTx","failedTx","noMint","swapSkip","small"])st[k]=0;st.err=""},10000);
 const cmd=(m,k)=>up.readyState===1&&up.send(JSON.stringify({method:m,keys:[k]}));
 async function pLogo(mint){const m=meta.get(mint);if(!m?.uri)return;try{const j=await(await fetch(m.uri,{signal:AbortSignal.timeout(4000)})).json();if(meta.has(mint))m.logo=j.image}catch{}}
 function pump(){up=new WebSocket("wss://pumpportal.fun/api/data");
@@ -103,4 +105,9 @@ if(seen.has(v.signature)||v.logs.length>45||!v.logs.some(l=>/swap|route/i.test(l
 seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push({sig:v.signature,t:Date.now()});st.queued++;while(queue.length&&Date.now()-queue[0].t>30000)queue.shift();if(queue.length>3000)queue.shift()});
 const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",()=>{clearInterval(ka);setTimeout(dex,3000)});sw.on("error",e=>{st.err="dex: "+e.message})}
 if(KEY||process.env.RPC_WS)dex();else console.log("No HELIUS_KEY set: pump.fun only. Add a key to include Jupiter, Raydium, Orca and Meteora.");
+if(store.enabled){setInterval(()=>store.flush(),5000);
+store.loadWallets().then(rows=>{for(const w of rows)if(!wallets.has(w.wallet))wallets.set(w.wallet,{n:w.n,ll:w.ll,hrs:w.hours_mask,t:[],bot:w.bot});console.log("[db] loaded "+rows.length+" wallet profiles")}).catch(e=>console.log("[db] could not load wallets:",e.message));
+store.loadTracked().then(a=>{a.forEach(watch);console.log("[db] loaded "+a.length+" tracked wallets")}).catch(e=>console.log("[db] could not load tracked wallets:",e.message))}
+else console.log("No SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY: history is off (live view still works).");
+const bye=async()=>{console.log("shutting down");await store.flush().catch(()=>{});process.exit(0)};process.on("SIGTERM",bye);process.on("SIGINT",bye);
 server.listen(PORT,()=>console.log("Trade Globe on http://localhost:"+PORT));

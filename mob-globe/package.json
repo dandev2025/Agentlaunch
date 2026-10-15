@@ -1,1 +1,1 @@
-{"name":"trade-globe-live","type":"module","engines":{"node":">=20.6"},"scripts":{"start":"node --env-file-if-exists=.env server.js"},"dependencies":{"ws":"^8.18.0"}}
+{"name":"trade-globe-live","type":"module","engines":{"node":">=20.6"},"scripts":{"test":"node --test \"test/*.test.js\"","start":"node --env-file-if-exists=.env server.js"},"dependencies":{"ws":"^8.18.0"}}
