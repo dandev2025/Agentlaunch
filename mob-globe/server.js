@@ -119,7 +119,7 @@ setInterval(()=>{const i=queue.findLastIndex(x=>Date.now()-x.t>3000);if(i<0)retu
 const B58A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz",TRADE=Buffer.from("bddb7fd34ee661ee","hex");
 const b58=u=>{let n=0n;for(const x of u)n=n*256n+BigInt(x);let o="";while(n>0n){o=B58A[Number(n%58n)]+o;n/=58n}for(const x of u){if(x)break;o="1"+o}return o};
 const pumpEvent=b=>b.length>=97&&b.subarray(0,8).equals(TRADE)?{mint:b58(b.subarray(8,40)),sol:Number(b.readBigUInt64LE(40))/1e9,buy:b[56]===1,user:b58(b.subarray(57,89))}:null; // pump.fun TradeEvent from "Program data:" log lines
-function pumpTrade(e,sig){st.pumpEv++;const w=touch(e.user),usd=Math.round(e.sol*sol),now=Date.now(),pin=watched.has(e.user);
+function pumpTrade(e,sig){st.pumpEv++;if(!(e.sol>0&&e.sol<=500)){st.badEv=(st.badEv||0)+1;return}const w=touch(e.user),usd=Math.round(e.sol*sol),now=Date.now(),pin=watched.has(e.user);
 store.add({mint:e.mint,sym:meta.get(e.mint)?.sym||tokMeta.get(e.mint)?.sym,venue:"pump.fun",region:w.bot?-1:pick(w),buy:e.buy,usd:e.sol*sol,wallet:e.user,sig,bot:w.bot});store.wallet(e.user,w);
 if(usd<1&&!pin)return;if(!pin&&usd<1000&&now-last<35)return;if(!pin)last=now;st.pumpTrades++;
 const m=meta.get(e.mint),go=(sy,l)=>out("$"+String(sy).toUpperCase(),e.buy,usd,"pump.fun",e.user,l,e.mint,sig);const wait=p=>Promise.race([p,new Promise(r=>setTimeout(r,700))]);if(m)wait(ensureLogo(e.mint,m.logo)).then(()=>go(m.sym||e.mint.slice(0,4),m.logo));else tokenInfo(e.mint).then(i=>wait(ensureLogo(e.mint,i.logo)).then(()=>go(i.sym,i.logo)))}

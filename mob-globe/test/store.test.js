@@ -78,3 +78,7 @@ test("SUPABASE_URL pasted with /rest/v1/ on the end, or spaces, still hits the r
     assert.match(calls[0].url, /^https:\/\/x\.supabase\.co\/rest\/v1\/flow_minute\?/, u);
   }
 });
+test("an impossible trade size (corrupted event) is never counted", async () => {
+  const { s, calls } = mk(); s.add(tr({ usd: 83751360 })); s.add(tr({ usd: 1000001, sig: "x" })); await s.flush(); assert.equal(calls.length, 0);
+  s.add(tr({ usd: 999999 })); await s.flush(); assert.equal(calls.find(c => c.url.includes("flow_minute")).body[0].buy_usd, 999999);
+});

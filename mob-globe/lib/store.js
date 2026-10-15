@@ -20,7 +20,7 @@ export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = c
 
   // t: {mint, sym, venue, region, buy(bool), usd, wallet, sig, bot}
   function add(t) {
-    if (!enabled || !t.mint || !(t.usd > 0) || now() < launch) return; // nothing is counted before the launch date
+    if (!enabled || !t.mint || !(t.usd > 0) || t.usd > 1e6 || now() < launch) return; // nothing is counted before the launch date
     const minute = Math.floor(now() / 60000) * 60000, venue = t.venue || "", k = `${minute}|${t.mint}|${venue}|${t.region}`;
     let b = buckets.get(k);
     if (!b) { b = { bucket: new Date(minute).toISOString(), mint: t.mint, sym: t.sym || null, venue, region: t.region, buy_usd: 0, sell_usd: 0, trades: 0, minute }; buckets.set(k, b) }
