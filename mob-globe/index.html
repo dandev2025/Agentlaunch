@@ -61,7 +61,7 @@ body.cm .cmui{display:flex;flex-direction:column;position:absolute;inset:0;paddi
 .it .m{flex:1;min-width:0}.it small{display:block;color:var(--mut);font-size:11px;margin-top:1px}.it>b{font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
 .sd{font-weight:700;font-size:10px;letter-spacing:.06em;padding:4px 9px;border-radius:99px}.sd.b{background:rgba(46,224,138,.14)}.sd.s{background:rgba(255,90,110,.14)}
 </style></head><body><div class="wrap">
-<div class="top"><div class="brand"><img class="logo" data-mob alt=""><div><b>MEMEMOBBING</b><small>Mob Globe · live token flow by region</small></div></div><div style="display:flex;gap:8px"><button class="live" id="cmb" type="button">🎬 Content mode</button><div class="live"><i></i><span id="lv">DEMO</span></div></div></div>
+<div class="top"><div class="brand"><img class="logo" data-mob alt=""><div><b>MEMEMOBBING</b><small>Mob Globe · live token flow by region</small></div></div><div style="display:flex;gap:8px"><button class="live" id="cmb" type="button">🎬 Content mode</button><div class="live"><i></i><span id="lv">OFFLINE</span></div></div></div>
 <div class="stats"><div class="st"><small>VOLUME</small><b id="tv">$0</b></div><div class="st"><small>TRADES</small><b id="tc">0</b></div><div class="st"><small>NET FLOW</small><b id="nfv">$0</b></div></div>
 <div class="hero"><canvas id="c"></canvas>
 <img class="mob" data-mob alt="">
@@ -70,7 +70,7 @@ body.cm .cmui{display:flex;flex-direction:column;position:absolute;inset:0;paddi
 <div class="cmui" id="cmui"><div class="cmtop"><img data-mob class="cmlogo" alt=""><div><b>MEMEMOBBING</b><small>LIVE MOB FLOW</small></div></div>
 <div class="cmstats"><div><small>VOLUME</small><b id="cmv">$0</b></div><div><small>NET FLOW</small><b id="cmn">$0</b></div><div><small id="cmt">0 trades</small></div></div>
 <div class="cmfeed" id="cmf"></div></div><button class="cmx" id="cmx" type="button">✕ Exit</button>
-<div class="note"><span id="nt">DEMO · SIMULATED DATA</span> · REGIONS ESTIMATED FROM TRADING HOURS · DRAG TO ROTATE</div></div>
+<div class="note"><span id="nt">CONNECTING TO LIVE FEED…</span> · REGIONS ESTIMATED FROM TRADING HOURS · DRAG TO ROTATE</div></div>
 <div class="press"><div class="pl"><span class="b">BUYS</span><span id="bs">50% buys</span><span class="s">SELLS</span></div><div class="pbar"><i id="rb"></i></div></div>
 <div class="botline" id="bt">🤖 Bot-like wallets are filtered from the map</div>
 <div class="chips" id="chips"></div>
@@ -78,6 +78,7 @@ body.cm .cmui{display:flex;flex-direction:column;position:absolute;inset:0;paddi
 <div class="sec">TOP TOKENS BY FLOW</div><div class="chips" id="lt"></div><div class="feed" id="lb" style="min-height:0"></div>
 <div class="sec">TRACKED WALLETS</div><div class="pinrow"><input id="pi" placeholder="Paste a Solana wallet address" autocapitalize="off" autocorrect="off" spellcheck="false"><button id="pb">Track</button></div><div id="pl"></div><div class="feed" id="pf" style="min-height:0;margin-top:8px"></div>
 <div class="ctl">Time of day (UTC) <b id="hl"></b><input type="range" id="hr" min="0" max="23" step="1"></div>
+<div id="tot" style="display:none"><div class="sec" id="sl_tt">SINCE LAUNCH</div><div class="card" style="padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card)"><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:90px"><small style="color:var(--mut);font-size:10px;letter-spacing:.1em">TRACKED VOLUME</small><div id="sl_tv" style="font:700 20px ui-monospace,Menlo,monospace"></div></div><div style="flex:1;min-width:90px"><small style="color:var(--mut);font-size:10px;letter-spacing:.1em">TRADES</small><div id="sl_tn" style="font:700 20px ui-monospace,Menlo,monospace"></div></div><div style="flex:1;min-width:90px"><small style="color:var(--mut);font-size:10px;letter-spacing:.1em">NET FLOW</small><div id="sl_tf" style="font:700 20px ui-monospace,Menlo,monospace"></div></div></div><div id="sl_tp" style="margin-top:10px"></div><div style="font-size:11px;color:var(--mut);margin-top:8px">pump.fun trades are counted in full. Jupiter, Raydium, Orca and Meteora are sampled, so this is a lower bound, not total market volume.</div></div></div>
 <div id="hist" style="display:none"><div class="sec">FLOW HISTORY · TOTAL BUYS vs SELLS (USD)</div><div class="chips" id="ht"></div><div class="card" style="padding:10px 10px 6px;border:1px solid var(--line);border-radius:14px;background:var(--card)"><div id="hc"></div><div id="hs" style="font-size:11px;color:var(--mut);margin-top:4px"></div></div></div>
 <div class="sec">LIVE FEED</div><div class="feed" id="feed"></div>
 </div>
@@ -116,7 +117,7 @@ const HP=H.map(h=>mk(h[1],h[2])),GR=[];
 for(let la=-60;la<=60;la+=30){const l=[];for(let lo=-180;lo<=180;lo+=5)l.push(mk(lo,la));GR.push(l)}
 for(let lo=-180;lo<180;lo+=30){const l=[];for(let la=-90;la<=90;la+=5)l.push(mk(lo,la));GR.push(l)}
 document.getElementById("spin").onclick=e=>{paused=!paused;e.target.classList.toggle("on",!paused)};
-document.getElementById("reset").onclick=()=>{rot=-1.2;tilt=0.42;vr=0;vt=0};const RN=["Americas","Europe/MEA","Asia-Pacific"],tok=["$MOB","$WIF","$BONK","$POPCAT","$ROLLUP","$GOLDENBOOT","$MOODENG","$FART"];
+document.getElementById("reset").onclick=()=>{rot=-1.2;tilt=0.42;vr=0;vt=0};const RN=["Americas","Europe/MEA","Asia-Pacific"],tok=["$WIF","$BONK","$POPCAT","$ROLLUP","$GOLDENBOOT","$MOODENG","$FART"];
 const c=document.getElementById("c"),x=c.getContext("2d");let W,Hh,R,cx,cy;
 function size(){const cm=document.body.classList.contains("cm"),d=Math.min(devicePixelRatio||1,2);W=c.clientWidth;Hh=cm?innerHeight:Math.min(W*0.95,540);c.width=W*d;c.height=Hh*d;c.style.height=Hh+"px";x.setTransform(d,0,0,d,0,0);R=Math.min(W,Hh)*(cm?(Hh>W?.43:.4):.38);cx=W/2;cy=cm?Hh*.47:Hh/2+6}
 addEventListener("resize",size);size();
@@ -139,13 +140,13 @@ const vol=[[1,1],[1,1],[1,1]],bub=[],feed=[];let tv=0,tc=0,tb=0,ts=0,paused=fals
 function weight(h){const l=(+hr.value+h[1]/15+24)%24;return 0.15+0.85*Math.max(0,Math.cos((l-15)/24*2*Math.PI))}
 function pick(){const w=H.map(weight),t=w.reduce((a,b)=>a+b);let r=Math.random()*t;for(let i=0;i<H.length;i++){r-=w[i];if(r<=0)return H[i]}return H[0]}
 const hue=s=>{let h=0;for(const ch of s)h=(h*31+ch.charCodeAt(0))%360;return h};
-let filt=null;const coins={},EM={"$MOB":"🟠","$WIF":"🧢","$BONK":"🐕","$POPCAT":"😺","$ROLLUP":"🌿","$GOLDENBOOT":"👟","$MOODENG":"🦛","$FART":"💨"};
+let filt=null;const coins={},EM={"$WIF":"🧢","$BONK":"🐕","$POPCAT":"😺","$ROLLUP":"🌿","$GOLDENBOOT":"👟","$MOODENG":"🦛","$FART":"💨"};
 for(const t of tok){const q0=document.createElement("canvas");q0.width=q0.height=64;const q=q0.getContext("2d"),h=hue(t),gg=q.createRadialGradient(24,22,4,32,32,32);gg.addColorStop(0,`hsl(${h} 80% 62%)`);gg.addColorStop(1,`hsl(${h} 70% 32%)`);
 q.fillStyle=gg;q.beginPath();q.arc(32,32,30,0,7);q.fill();q.lineWidth=4;q.strokeStyle="#ffe9a8";q.stroke();q.font="30px serif";q.textAlign="center";q.textBaseline="middle";q.fillText(EM[t],32,35);coins[t]=q0}
 const chipsEl=document.getElementById("chips");const chipsHTML=chipsEl.innerHTML='<button class="chip on" data-t="">All coins</button>'+tok.map(t=>`<button class="chip" data-t="${t}">${EM[t]} ${t}</button>`).join("");
 chipsEl.onclick=e=>{const b=e.target.closest(".chip");if(!b)return;filt=b.dataset.t||null;chipsEl.querySelectorAll(".chip").forEach(n=>n.classList.toggle("on",n===b))};
 function trade(ev){if(ev&&ev.bot){BOT.n++;BOT.v+=ev.usd;updateBot();if(ev.wallet&&PINS.some(p=>p.addr===ev.wallet))pinHit(ev,ev.buy,ev.usd,ev.sym,"Bot (no location)");return}
-const h=ev?ev.hub:pick(),buy=ev?ev.buy:Math.random()<0.55,usd=ev?ev.usd:Math.round(Math.exp(5+Math.random()*4.5)),t=ev?ev.sym:(filt||(Math.random()<.25?"$MOB":tok[Math.random()*tok.length|0]));
+const h=ev?ev.hub:pick(),buy=ev?ev.buy:Math.random()<0.55,usd=ev?ev.usd:Math.round(Math.exp(5+Math.random()*4.5)),t=ev?ev.sym:(filt||tok[Math.random()*tok.length|0]);
 const o=mk(h[1]+(Math.random()-.5)*6,h[2]+(Math.random()-.5)*4);o.buy=buy;o.a=0;o.t=t;o.usd=usd;o.logo=ev&&ev.logo;o.pin=!!(ev&&ev.wallet&&PINS.some(p=>p.addr===ev.wallet));if(o.pin){o.w=ev.wallet;o.r+=8;pinHit(ev,buy,usd,t,h[0])}o.r=5+Math.log(usd)*1.7;bub.push(o);if(bub.length>70)bub.shift();
 tv+=usd;tc++;buy?tb+=usd:ts+=usd;document.getElementById("tv").textContent="$"+tv.toLocaleString();document.getElementById("tc").textContent=tc.toLocaleString();{const n=document.getElementById("nfv"),d=tb-ts;n.textContent=(d>=0?"+":"-")+"$"+Math.abs(d).toLocaleString();n.className=d>=0?"b":"s";document.getElementById("rb").style.width=(tb/(tb+ts)*100)+"%";document.getElementById("bs").textContent=Math.round(tb/(tb+ts)*100)+"% buys"}
 vol[h[3]][buy?0:1]+=usd;track(t,h[3],buy,usd,ev&&ev.logo,{buy,usd,city:h[0],r:h[3],venue:ev&&ev.venue,wallet:ev?ev.wallet:fakeW(),sig:ev&&ev.sig,n:ev&&ev.n,mint:ev&&ev.mint,ts:Date.now()});feed.unshift({t,buy,usd,city:h[0],v:ev&&ev.venue,logo:ev&&ev.logo});feed.length=Math.min(feed.length,6);
@@ -225,11 +226,11 @@ if(feed[0]!==cmLast){cmLast=feed[0];gid("cmf").innerHTML=feed.slice(0,3).map(f=>
 setTimeout(cmTick,400)}
 const lt=document.getElementById("lt");lt.innerHTML=["All regions","Americas","Europe/MEA","Asia-Pacific"].map((n,i)=>`<button class="chip${i?"":" on"}" data-i="${i-1}">${n}</button>`).join("");
 lt.onclick=e=>{const b=e.target.closest(".chip");if(!b)return;lreg=+b.dataset.i;lt.querySelectorAll(".chip").forEach(n=>n.classList.toggle("on",n===b));renderLB()};
-function drawCoin(c0,t,im){const q=c0.getContext("2d"),h=hue(t),gg=q.createRadialGradient(24,22,4,32,32,32);q.clearRect(0,0,64,64);gg.addColorStop(0,t==="$MOB"?"#3a1a08":`hsl(${h} 80% 62%)`);gg.addColorStop(1,t==="$MOB"?"#0c0603":`hsl(${h} 70% 32%)`);q.fillStyle=gg;q.beginPath();q.arc(32,32,30,0,7);q.fill();
-if(im){q.save();q.beginPath();q.arc(32,32,27,0,7);q.clip();if(t==="$MOB"){const w=54*im.width/im.height;q.drawImage(im,32-w/2,8,w,54)}else q.drawImage(im,5,5,54,54);q.restore()}else{q.fillStyle="#fff";q.font="700 22px system-ui,sans-serif";q.textAlign="center";q.textBaseline="middle";q.fillText(EM[t]||t.slice(1,3).toUpperCase(),32,34)}
+function drawCoin(c0,t,im){const q=c0.getContext("2d"),h=hue(t),gg=q.createRadialGradient(24,22,4,32,32,32);q.clearRect(0,0,64,64);gg.addColorStop(0,false?"#3a1a08":`hsl(${h} 80% 62%)`);gg.addColorStop(1,false?"#0c0603":`hsl(${h} 70% 32%)`);q.fillStyle=gg;q.beginPath();q.arc(32,32,30,0,7);q.fill();
+if(im){q.save();q.beginPath();q.arc(32,32,27,0,7);q.clip();if(false){const w=54*im.width/im.height;q.drawImage(im,32-w/2,8,w,54)}else q.drawImage(im,5,5,54,54);q.restore()}else{q.fillStyle="#fff";q.font="700 22px system-ui,sans-serif";q.textAlign="center";q.textBaseline="middle";q.fillText(EM[t]||t.slice(1,3).toUpperCase(),32,34)}
 q.lineWidth=4;q.strokeStyle="#ffe9a8";q.beginPath();q.arc(32,32,30,0,7);q.stroke()}
 function getCoin(t,logo){let k=coins[t];if(!k){k=coins[t]=document.createElement("canvas");k.width=k.height=64;drawCoin(k,t,null)}
-if(t==="$MOB"&&!k.M){k.M=1;const go=()=>drawCoin(k,t,mi);mi.complete?go():mi.addEventListener("load",go)}
+if(false&&!k.M){k.M=1;const go=()=>drawCoin(k,t,mi);mi.complete?go():mi.addEventListener("load",go)}
 if(logo&&k.L!==logo){k.L=logo;const im=new Image();im.onload=()=>drawCoin(k,t,im);im.onerror=()=>{if(k.L===logo)k.L=0};im.src=logo}return k}
 let hrange="24h";const hh=document.getElementById("hist"),ht=document.getElementById("ht");
 ht.innerHTML=[["24h","24 hours"],["7d","7 days"],["30d","30 days"]].map(([k,n],i)=>`<button class="chip${i?"":" on"}" data-r="${k}">${n}</button>`).join("");
@@ -241,10 +242,17 @@ const bars=d.map((q,i)=>{const x0=m+i*((W-m)/d.length),hb=q.buy/mx*(H/2-8),hs=q.
 document.getElementById("hc").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Buys above, sells below, per ${hrange==="24h"?"hour":"day"}"><line x1="${m}" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="var(--line)"/><text x="0" y="12" fill="var(--mut)" font-size="9">${usdK(mx)}</text><text x="0" y="${H-4}" fill="var(--mut)" font-size="9">${usdK(mx)}</text>${bars}</svg>`;
 const tb=d.reduce((a,q)=>a+q.buy,0),ts=d.reduce((a,q)=>a+q.sell,0),tn=d.reduce((a,q)=>a+q.trades,0);
 document.getElementById("hs").textContent=`Buys $${usdK(tb)} · Sells $${usdK(ts)} · ${tn.toLocaleString()} trades saved (sampled feed, not every trade on-chain)`}catch{hh.style.display="none"}}
+const tot=document.getElementById("tot"),esc=s=>String(s).replace(/[&<>"']/g,c=>"&#"+c.charCodeAt(0)+";");
+async function loadTot(){try{const r=await fetch("/api/totals");if(!r.ok)throw 0;const d=await r.json(),v=d.buy+d.sell,nf=d.buy-d.sell,since=d.since||d.firstData;
+tot.style.display="";document.getElementById("sl_tt").textContent="SINCE LAUNCH"+(since?" · "+new Date(since).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"");
+document.getElementById("sl_tv").textContent="$"+usdK(v);document.getElementById("sl_tn").textContent=d.trades.toLocaleString();const f=document.getElementById("sl_tf");f.textContent=(nf>=0?"+":"-")+"$"+usdK(Math.abs(nf));f.style.color=nf>=0?"var(--buy)":"var(--sell)";
+document.getElementById("sl_tp").innerHTML=d.top.slice(0,5).map((x,i)=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-top:1px solid var(--line)"><span>${i+1}. <b>${esc(x.sym||x.mint.slice(0,4))}</b></span><span style="font-family:ui-monospace,Menlo,monospace">$${usdK(x.buy+x.sell)}</span></div>`).join("")}catch{tot.style.display="none"}}
+setTimeout(loadTot,1200);setInterval(loadTot,60000);
 setTimeout(loadHist,1500);setInterval(loadHist,60000);
 let WS=null;try{const ws=WS=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/stream");
 ws.onopen=()=>{if(getCode())ws.send(JSON.stringify({hello:getCode()}));live=true;filt=null;PINS.forEach(p=>ws.send(JSON.stringify({pin:p.addr})));chipsEl.innerHTML=["All venues","pump.fun","Jupiter","Raydium","Orca","Meteora"].map((v,i)=>`<button class="chip${i?"":" on"}" data-t="${i?v:""}">${v}</button>`).join("");document.getElementById("lv").textContent="LIVE";document.getElementById("nt").textContent="LIVE SOLANA DEX TRADES"};
 ws.onmessage=m=>{try{const d=JSON.parse(m.data);if(d.pinError){if(d.pinError==="code"){const c=prompt("Owner passcode to track wallets on the server:");if(c){try{localStorage.setItem("mobcode",c)}catch{}ws.send(JSON.stringify({hello:c}));PINS.forEach(p=>ws.send(JSON.stringify({pin:p.addr,code:c})))}}else alert(d.pinError==="locked"?"Too many wrong passcodes. Try later.":"Wallet tracking is turned off on this server.");return}if(d.tracked){d.tracked.forEach(a=>{if(!PINS.some(p=>p.addr===a)){PINS.push({addr:a});}});savePins();renderPins();return}if(filt&&d.venue!==filt&&!PINS.some(p=>p.addr===d.wallet))return;trade({hub:[d.city,d.lon,d.lat,d.r],buy:d.buy,usd:d.usd,sym:d.sym,logo:d.logo,venue:d.venue,wallet:d.wallet,mint:d.mint,sig:d.sig,n:d.n,bot:d.bot})}catch(e){}};
-ws.onclose=()=>{live=false;filt=null;chipsEl.innerHTML=chipsHTML;document.getElementById("lv").textContent="DEMO";document.getElementById("nt").textContent="DEMO · SIMULATED DATA"}}catch(e){}
-(function tick(){if(!live){if(PINS.length&&Math.random()<.08)trade({hub:pick(),buy:Math.random()<.5,usd:Math.round(Math.exp(6+Math.random()*3.5)),sym:tok[Math.random()*tok.length|0],wallet:PINS[Math.random()*PINS.length|0].addr,venue:"demo"});else if(Math.random()<.1)trade({bot:true,buy:Math.random()<.5,usd:Math.round(Math.exp(5+Math.random()*4)),sym:"$MOB",wallet:fakeW()});else trade()}setTimeout(tick,220+Math.random()*450)})();
+ws.onclose=()=>{live=false;filt=null;chipsEl.innerHTML=chipsHTML;document.getElementById("lv").textContent=DEMO?"DEMO":"OFFLINE";document.getElementById("nt").textContent=DEMO?"DEMO · SIMULATED DATA":"RECONNECTING TO LIVE FEED…"}}catch(e){}
+const DEMO=/[?&]demo\b/.test(location.search);
+(function tick(){if(!live&&DEMO){if(PINS.length&&Math.random()<.08)trade({hub:pick(),buy:Math.random()<.5,usd:Math.round(Math.exp(6+Math.random()*3.5)),sym:tok[Math.random()*tok.length|0],wallet:PINS[Math.random()*PINS.length|0].addr,venue:"demo"});else if(Math.random()<.1)trade({bot:true,buy:Math.random()<.5,usd:Math.round(Math.exp(5+Math.random()*4)),sym:tok[Math.random()*tok.length|0],wallet:fakeW()});else trade()}setTimeout(tick,220+Math.random()*450)})();
 </script></body></html>

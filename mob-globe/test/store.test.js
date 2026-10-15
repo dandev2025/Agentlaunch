@@ -55,3 +55,14 @@ test("new-style sb_ keys go in apikey only, legacy JWT keys in both headers", as
   const a = mk({ key: "sb_secret_x" }); a.s.add(tr()); await a.s.flush(); assert.equal(a.calls[0].headers.authorization, undefined); assert.equal(a.calls[0].headers.apikey, "sb_secret_x");
   const b = mk({ key: "eyJabc" }); b.s.add(tr()); await b.s.flush(); assert.equal(b.calls[0].headers.authorization, "Bearer eyJabc");
 });
+test("nothing is counted before the launch date, counting starts after it", async () => {
+  const early = mk({ launch: Date.UTC(2026, 9, 16) }); early.s.add(tr()); await early.s.flush(); assert.equal(early.calls.length, 0);
+  const late = mk({ launch: Date.UTC(2026, 9, 1) }); late.s.add(tr()); await late.s.flush(); assert.equal(late.calls.length > 0, true);
+});
+test("totals() sums the daily rows and passes the launch date as the start", async () => {
+  const calls = []; const fetchFn = async (u, i) => { calls.push({ u, b: i?.body && JSON.parse(i.body) });
+    return { ok: true, json: async () => u.includes("flow_top") ? [{ mint: "M", sym: "$A", buy: "5", sell: "2", trades: 3 }] : [{ t: "d1", buy: "10", sell: "4", trades: 3 }, { t: "d2", buy: "1.5", sell: "0.5", trades: 2 }] } };
+  const s = createStore({ url: "https://x.supabase.co", key: "K", fetchFn, launch: Date.UTC(2026, 9, 16), log: () => {} });
+  const r = await s.totals(); assert.deepEqual([r.buy, r.sell, r.trades], [11.5, 4.5, 5]); assert.equal(r.since, "2026-10-16T00:00:00.000Z"); assert.equal(r.top[0].sym, "$A");
+  assert.equal(calls[0].b.since, "2026-10-16T00:00:00.000Z");
+});

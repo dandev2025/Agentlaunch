@@ -53,6 +53,19 @@ language sql stable as $$
   ) x group by 1 order by 1
 $$;
 
+-- Top tokens by volume since a date (for the "since launch" leaderboard).
+create or replace function flow_top(since timestamptz, n int default 10)
+returns table(mint text, sym text, buy numeric, sell numeric, trades bigint)
+language sql stable as $$
+  select x.mint, max(x.sym), sum(x.bu), sum(x.se), sum(x.tr)::bigint
+  from (
+    select mint, sym, buy_usd bu, sell_usd se, trades::bigint tr from flow_minute where bucket >= since
+    union all
+    select mint, sym, buy_usd, sell_usd, trades::bigint from hourly_flow
+      where bucket >= since and bucket < coalesce((select min(bucket) from flow_minute), 'infinity'::timestamptz)
+  ) x group by x.mint order by sum(x.bu) + sum(x.se) desc limit least(greatest(n, 1), 50)
+$$;
+
 -- Roll old minutes into hourly rows and apply retention. Run hourly (see pg_cron below).
 create or replace function rollup_hourly(older_than interval default '7 days')
 returns void language plpgsql as $$

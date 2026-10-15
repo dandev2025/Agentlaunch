@@ -1,6 +1,6 @@
 // Batched Supabase writer for the relay. Talks to PostgREST with plain fetch (no extra dependency).
 // Never throws into the trade path: a Supabase outage only delays writes (buffers are kept, capped, retried with backoff).
-export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = console.log, bigUsd = 5000 } = {}) {
+export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = console.log, bigUsd = 5000, launch = 0 } = {}) {
   const okUrl = /^https?:\/\/[^\s/]+/.test(url || "");
   if (url && !okUrl) log("[db] SUPABASE_URL must be the Project URL like https://abcdefgh.supabase.co (history is OFF). Got something that is not a URL.");
   const enabled = !!(url && key && okUrl), base = enabled ? url.replace(/\/+$/, "") + "/rest/v1/" : "";
@@ -19,7 +19,7 @@ export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = c
 
   // t: {mint, sym, venue, region, buy(bool), usd, wallet, sig, bot}
   function add(t) {
-    if (!enabled || !t.mint || !(t.usd > 0)) return;
+    if (!enabled || !t.mint || !(t.usd > 0) || now() < launch) return; // nothing is counted before the launch date
     const minute = Math.floor(now() / 60000) * 60000, venue = t.venue || "", k = `${minute}|${t.mint}|${venue}|${t.region}`;
     let b = buckets.get(k);
     if (!b) { b = { bucket: new Date(minute).toISOString(), mint: t.mint, sym: t.sym || null, venue, region: t.region, buy_usd: 0, sell_usd: 0, trades: 0, minute }; buckets.set(k, b) }
@@ -56,6 +56,15 @@ export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = c
     loadTracked: async () => enabled ? (await get("tracked_wallets?select=addr&limit=200")).map(r => r.addr) : [],
     saveTracked: async addr => { if (enabled) await upsert("tracked_wallets", [{ addr }], "addr", true) },
     loadWallets: async (limit = 20000) => enabled ? await get(`wallet_stats?select=wallet,n,hours_mask,ll,bot&order=updated_at.desc&limit=${limit}`) : [],
+    // Totals since the launch date (or since the first saved row when no launch date is set)
+    totals: async () => {
+      const since = new Date(launch || 0).toISOString();
+      const rows = await (await call("rpc/flow_agg", { method: "POST", headers: hdr({}), body: JSON.stringify({ since, unit: "day" }) })).json();
+      const top = await (await call("rpc/flow_top", { method: "POST", headers: hdr({}), body: JSON.stringify({ since, n: 10 }) })).json();
+      return { since: launch ? new Date(launch).toISOString() : null, firstData: rows[0]?.t || null,
+        buy: rows.reduce((a, r) => a + +r.buy, 0), sell: rows.reduce((a, r) => a + +r.sell, 0), trades: rows.reduce((a, r) => a + +r.trades, 0),
+        top: top.map(x => ({ mint: x.mint, sym: x.sym, buy: +x.buy, sell: +x.sell, trades: +x.trades })) };
+    },
     flow: async range => {
       const hours = { "24h": 24, "7d": 168, "30d": 720 }[range]; if (!hours) throw new Error("bad range");
       const r = await call("rpc/flow_agg", { method: "POST", headers: hdr({}), body: JSON.stringify({ since: new Date(now() - hours * 3600e3).toISOString(), unit: range === "24h" ? "hour" : "day" }) });
