@@ -31,8 +31,8 @@ const out=(sym,buy,usd,venue,wallet,logo,mint,sig)=>{const e=wallets.get(wallet)
 m=JSON.stringify({sym,buy,usd,venue,city:h[0],lon:h[1],lat:h[2],r,logo,wallet,mint,sig,n:e.n,bot});wss.clients.forEach(c=>c.readyState===1&&c.send(m));st.sent++};
 
 // ---- pump.fun via PumpPortal ----
-const meta=new Map(),subs=[];let up,last=0;const st={pump:0,pumpTrades:0,logs:0,queued:0,decoded:0,sent:0,err:""};
-setInterval(()=>{console.log(`[10s] pump msgs ${st.pump} (trades ${st.pumpTrades}) | dex logs ${st.logs} queued ${st.queued} decoded ${st.decoded} | sent to browsers ${st.sent} | pump ${up?.readyState===1?"up":"DOWN"} dex ${sw?.readyState===1?"up":"DOWN"} | clients ${wss.clients.size}${st.err?" | last error: "+st.err:""}`);for(const k of ["pump","pumpTrades","logs","queued","decoded","sent"])st[k]=0;st.err=""},10000);
+const meta=new Map(),subs=[];let up,last=0;const st={pump:0,pumpTrades:0,logs:0,queued:0,decoded:0,sent:0,err:"",tried:0,rpcErr:0,noTx:0,failedTx:0,noMint:0,swapSkip:0,small:0};
+setInterval(()=>{console.log(`[10s] pump msgs ${st.pump} (trades ${st.pumpTrades}) | dex logs ${st.logs} queued ${st.queued} tried ${st.tried} (rpcErr ${st.rpcErr} notFound ${st.noTx} failedTx ${st.failedTx} noMint ${st.noMint} tokenForToken ${st.swapSkip} small ${st.small}) decoded ${st.decoded} | sent to browsers ${st.sent} | pump ${up?.readyState===1?"up":"DOWN"} dex ${sw?.readyState===1?"up":"DOWN"} | clients ${wss.clients.size}${st.err?" | last error: "+st.err:""}`);for(const k of ["pump","pumpTrades","logs","queued","decoded","sent","tried","rpcErr","noTx","failedTx","noMint","swapSkip","small"])st[k]=0;st.err=""},10000);
 const cmd=(m,k)=>up.readyState===1&&up.send(JSON.stringify({method:m,keys:[k]}));
 async function pLogo(mint){const m=meta.get(mint);if(!m?.uri)return;try{const j=await(await fetch(m.uri,{signal:AbortSignal.timeout(4000)})).json();if(meta.has(mint))m.logo=j.image}catch{}}
 function pump(){up=new WebSocket("wss://pumpportal.fun/api/data");
@@ -57,17 +57,17 @@ async function tokenInfo(mint){if(tokMeta.has(mint))return tokMeta.get(mint);let
 try{const p=(await(await fetch("https://api.dexscreener.com/latest/dex/tokens/"+mint,{signal:AbortSignal.timeout(4000)})).json()).pairs?.[0];if(p)v={sym:p.baseToken.symbol,logo:p.info?.imageUrl}}catch{}
 tokMeta.set(mint,v);if(tokMeta.size>5000)tokMeta.delete(tokMeta.keys().next().value);return v}
 const bal=b=>parseFloat(b.uiTokenAmount.uiAmountString||"0");
-async function decode(sig){if(done.has(sig))return;done.add(sig);if(done.size>5000)done.delete(done.values().next().value);const t=(await rpc("getTransaction",[sig,{encoding:"jsonParsed",maxSupportedTransactionVersion:0,commitment:"confirmed"}])).result;
-if(!t||t.meta?.err)return;const keys=t.transaction.message.accountKeys.map(k=>k.pubkey||k),signer=keys[0],m=t.meta,d=new Map();
+async function decode(sig){if(done.has(sig))return;done.add(sig);if(done.size>5000)done.delete(done.values().next().value);st.tried++;const r=await rpc("getTransaction",[sig,{encoding:"jsonParsed",maxSupportedTransactionVersion:0,commitment:"confirmed"}]);if(r.error){st.rpcErr++;st.err="rpc: "+JSON.stringify(r.error).slice(0,160);return}const t=r.result;
+if(!t){st.noTx++;return}if(t.meta?.err){st.failedTx++;return}const keys=t.transaction.message.accountKeys.map(k=>k.pubkey||k),signer=keys[0],m=t.meta,d=new Map();
 for(const b of m.postTokenBalances||[])if(b.owner===signer)d.set(b.mint,(d.get(b.mint)||0)+bal(b));
 for(const b of m.preTokenBalances||[])if(b.owner===signer)d.set(b.mint,(d.get(b.mint)||0)-bal(b));
 const q=((m.postBalances[0]-m.preBalances[0]+m.fee)/1e9+(d.get(WSOL)||0))*sol+(d.get(USDC)||0);
 let mint,amt=0;for(const[k,v]of d)if(k!==WSOL&&k!==USDC&&Math.abs(v)>Math.abs(amt)){mint=k;amt=v}
-if(!mint)return;const buy=amt>0,usd=Math.round(Math.abs(q));if((buy&&q>=0)||(!buy&&q<=0)||usd<10)return; // token-for-token swaps skipped
+if(!mint){st.noMint++;return}const buy=amt>0,usd=Math.round(Math.abs(q));if((buy&&q>=0)||(!buy&&q<=0)){st.swapSkip++;return}if(usd<10){st.small++;return} // token-for-token swaps skipped
 const venue=keys.map(k=>PROG[k]).sort((a,b)=>(b==="Jupiter")-(a==="Jupiter")).find(Boolean)||"DEX",i=await tokenInfo(mint);
 st.decoded++;touch(signer);out("$"+String(i.sym).toUpperCase(),buy,usd,venue,signer,i.logo,mint,sig)}
 setInterval(()=>{while(pq.length)decode(pq.shift()).catch(()=>{})},300); // tracked wallets: always decoded
-setInterval(()=>{const s=queue.pop();if(s)decode(s).catch(e=>{st.err="decode: "+e.message})},1000/(+process.env.DECODE_PER_SEC||0.4)); // sampled swaps, newest first. Each decode = 1 Helius credit
+setInterval(()=>{const i=queue.findLastIndex(x=>Date.now()-x.t>3000);if(i<0)return;const s=queue.splice(i,1)[0].sig;decode(s).catch(e=>{st.err="decode: "+e.message})},1000/(+process.env.DECODE_PER_SEC||0.4)); // sampled swaps, newest first. Each decode = 1 Helius credit
 function dex(){sw=new WebSocket(WSU);let n=0;
 sw.on("open",()=>watched.forEach(w=>subWallet(w)));
 sw.on("open",()=>Object.keys(PROG).forEach(p=>sw.send(JSON.stringify({jsonrpc:"2.0",id:++n,method:"logsSubscribe",params:[{mentions:[p]},{commitment:"confirmed"}]}))));
@@ -75,7 +75,7 @@ sw.on("message",raw=>{let m;try{m=JSON.parse(raw)}catch{return}
 if(typeof m.id==="string"&&m.id[0]==="w"&&m.result!=null)wsubs.add(m.result);
 if(m.error)st.err=JSON.stringify(m.error).slice(0,200);const v=m.params?.result?.value;if(!v||v.err)return;st.logs++;
 if(wsubs.has(m.params.subscription)){pq.push(v.signature);return} // tracked wallets skip sampling
-if(seen.has(v.signature)||!v.logs.some(l=>/swap|route/i.test(l)))return;seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push(v.signature);st.queued++;if(queue.length>40)queue.shift()});
+if(seen.has(v.signature)||!v.logs.some(l=>/swap|route/i.test(l)))return;seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push({sig:v.signature,t:Date.now()});st.queued++;if(queue.length>40)queue.shift()});
 const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",()=>{clearInterval(ka);setTimeout(dex,3000)});sw.on("error",e=>{st.err="dex: "+e.message})}
 if(KEY||process.env.RPC_WS)dex();else console.log("No HELIUS_KEY set: pump.fun only. Add a key to include Jupiter, Raydium, Orca and Meteora.");
 server.listen(PORT,()=>console.log("Trade Globe on http://localhost:"+PORT));
