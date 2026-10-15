@@ -75,7 +75,7 @@ sw.on("message",raw=>{let m;try{m=JSON.parse(raw)}catch{return}
 if(typeof m.id==="string"&&m.id[0]==="w"&&m.result!=null)wsubs.add(m.result);
 if(m.error)st.err=JSON.stringify(m.error).slice(0,200);const v=m.params?.result?.value;if(!v||v.err)return;st.logs++;
 if(wsubs.has(m.params.subscription)){pq.push(v.signature);return} // tracked wallets skip sampling
-if(seen.has(v.signature)||!v.logs.some(l=>/swap|route/i.test(l)))return;seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push({sig:v.signature,t:Date.now()});st.queued++;if(queue.length>40)queue.shift()});
+if(seen.has(v.signature)||!v.logs.some(l=>/swap|route/i.test(l)))return;seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push({sig:v.signature,t:Date.now()});st.queued++;while(queue.length&&Date.now()-queue[0].t>30000)queue.shift();if(queue.length>3000)queue.shift()});
 const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",()=>{clearInterval(ka);setTimeout(dex,3000)});sw.on("error",e=>{st.err="dex: "+e.message})}
 if(KEY||process.env.RPC_WS)dex();else console.log("No HELIUS_KEY set: pump.fun only. Add a key to include Jupiter, Raydium, Orca and Meteora.");
 server.listen(PORT,()=>console.log("Trade Globe on http://localhost:"+PORT));
