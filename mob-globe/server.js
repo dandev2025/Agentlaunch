@@ -116,7 +116,7 @@ store.add({mint:e.mint,sym:meta.get(e.mint)?.sym||tokMeta.get(e.mint)?.sym,venue
 if(usd<1&&!pin)return;if(!pin&&usd<1000&&now-last<35)return;if(!pin)last=now;st.pumpTrades++;
 const m=meta.get(e.mint),go=(sy,l)=>out("$"+String(sy).toUpperCase(),e.buy,usd,"pump.fun",e.user,l,e.mint,sig);const wait=p=>Promise.race([p,new Promise(r=>setTimeout(r,700))]);if(m)wait(ensureLogo(e.mint,m.logo)).then(()=>go(m.sym||e.mint.slice(0,4),m.logo));else tokenInfo(e.mint).then(i=>wait(ensureLogo(e.mint,i.logo)).then(()=>go(i.sym,i.logo)))}
 const PUMP="6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";let pumpSub;
-function dex(){sw=new WebSocket(WSU);let n=0;sw.on("open",()=>{db0=0});pumpSub=undefined;
+function dex(){sw=new WebSocket(WSU);let n=0;sw.on("open",()=>{db0=0;lastDexErr=""});pumpSub=undefined;
 sw.on("open",()=>watched.forEach(w=>subWallet(w)));
 sw.on("open",()=>sw.send(JSON.stringify({jsonrpc:"2.0",id:"pump",method:"logsSubscribe",params:[{mentions:[PUMP]},{commitment:"confirmed"}]})));
 sw.on("open",()=>DEX_FEEDS&&Object.keys(PROG).forEach(p=>sw.send(JSON.stringify({jsonrpc:"2.0",id:++n,method:"logsSubscribe",params:[{mentions:[p]},{commitment:"confirmed"}]}))));
@@ -127,7 +127,7 @@ if(m.params.subscription===pumpSub){for(const l of v.logs)if(l.startsWith("Progr
 if(wsubs.has(m.params.subscription)){pq.push(v.signature);return} // tracked wallets skip sampling
 if(seen.has(v.signature)||v.logs.length>45||!v.logs.some(l=>/swap|route/i.test(l)))return; // long logs are usually arbitrage bots, which decode to nothing
 seen.add(v.signature);if(seen.size>5000)seen.delete(seen.values().next().value);queue.push({sig:v.signature,t:Date.now()});st.queued++;while(queue.length&&Date.now()-queue[0].t>30000)queue.shift();if(queue.length>3000)queue.shift()});
-const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",(c,r)=>{lastDexErr="closed "+c+" "+String(r).slice(0,80);clearInterval(ka);setTimeout(()=>{if(dexWanted)dex()},backoff(db0++))});sw.on("error",e=>{lastDexErr="error "+e.message;st.err="dex: "+e.message})}
+const ka=setInterval(()=>sw.readyState===1&&sw.ping(),30000);sw.on("close",(c,r)=>{lastDexErr=(lastDexErr.startsWith("error")?lastDexErr+" then ":"")+"closed "+c+" "+String(r).slice(0,60);clearInterval(ka);setTimeout(()=>{if(dexWanted)dex()},backoff(db0++))});sw.on("error",e=>{lastDexErr="error "+e.message;st.err="dex: "+e.message})}
 if(KEY||process.env.RPC_WS){if(!ON_DEMAND)dex();else console.log("On-demand mode: the Helius feed starts when someone opens the page and stops "+IDLE_MS/1000+"s after the last viewer leaves.")}else console.log("No HELIUS_KEY set: pump.fun only. Add a key to include Jupiter, Raydium, Orca and Meteora.");
 if(store.enabled){setInterval(()=>store.flush(),5000);
 store.loadWallets().then(rows=>{for(const w of rows)if(!wallets.has(w.wallet))wallets.set(w.wallet,{n:w.n,ll:w.ll,hrs:w.hours_mask,t:[],bot:w.bot});console.log("[db] loaded "+rows.length+" wallet profiles")}).catch(e=>console.log("[db] could not load wallets:",e.message));
