@@ -1,9 +1,10 @@
 // Batched Supabase writer for the relay. Talks to PostgREST with plain fetch (no extra dependency).
 // Never throws into the trade path: a Supabase outage only delays writes (buffers are kept, capped, retried with backoff).
 export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = console.log, bigUsd = 5000, launch = 0 } = {}) {
-  const okUrl = /^https?:\/\/[^\s/]+/.test(url || "");
+  const cleanUrl = String(url || "").trim().replace(/\/+$/, "").replace(/\/rest\/v1$/i, ""); // accepts the project URL with or without a pasted /rest/v1/ on the end
+  const okUrl = /^https?:\/\/[^\s/]+/.test(cleanUrl);
   if (url && !okUrl) log("[db] SUPABASE_URL must be the Project URL like https://abcdefgh.supabase.co (history is OFF). Got something that is not a URL.");
-  const enabled = !!(url && key && okUrl), base = enabled ? url.replace(/\/+$/, "") + "/rest/v1/" : "";
+  const enabled = !!(url && key && okUrl), base = enabled ? cleanUrl + "/rest/v1/" : "";
   const buckets = new Map(), bigs = [], dirty = new Map();
   const stat = { flushed: 0, failures: 0, lastError: "" };
   let nextTry = 0, failing = 0, busy = false;

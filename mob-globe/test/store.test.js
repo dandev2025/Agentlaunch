@@ -72,3 +72,9 @@ test("a wrong SUPABASE_URL that returns a web page gives a readable error, not a
   const s = createStore({ url: "https://x.supabase.co", key: "K", fetchFn, log: () => {} });
   await assert.rejects(() => s.totals(), /not JSON \(wrong SUPABASE_URL\?\)/);
 });
+test("SUPABASE_URL pasted with /rest/v1/ on the end, or spaces, still hits the right address", async () => {
+  for (const u of ["https://x.supabase.co/rest/v1/", "https://x.supabase.co/rest/v1", " https://x.supabase.co/ ", "https://x.supabase.co"]) {
+    const { s, calls } = mk({ url: u }); s.add(tr()); await s.flush();
+    assert.match(calls[0].url, /^https:\/\/x\.supabase\.co\/rest\/v1\/flow_minute\?/, u);
+  }
+});
