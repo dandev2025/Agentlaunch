@@ -17,6 +17,7 @@ keeps a process alive works (Railway, Render, Fly). Free tiers that sleep when i
 | `SUPABASE_URL` | `https://xxxx.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | your secret key |
 | `DECODE_PER_SEC` | `0.4` (free Helius plan) |
+| `LAUNCH_DATE` | your official start, e.g. `2026-10-16T00:00:00Z`. Nothing is counted before it. Leave unset to count from the first saved trade |
 | `PIN_PASSCODE` | a passcode only you know (needed to track wallets on the live site; without it tracking is OFF for everyone) |
 
 `PORT` is set by the host. `ALLOWED_ORIGINS` is only needed if another website embeds the globe (the relay's own page is always allowed).
