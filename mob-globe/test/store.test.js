@@ -47,3 +47,11 @@ test("flow() asks for hourly buckets for 24h and daily for 7d, rejects unknown r
   const { s, calls } = mk(); await s.flow("24h"); await s.flow("7d");
   assert.equal(calls[0].body.unit, "hour"); assert.equal(calls[1].body.unit, "day"); await assert.rejects(() => s.flow("1y"));
 });
+test("a key pasted into the URL field turns history off with a clear message", async () => {
+  const msgs = []; const { s, calls } = mk({ url: "sb_publishable_abc", log: m => msgs.push(m) }); s.add(tr()); await s.flush();
+  assert.equal(s.enabled, false); assert.equal(calls.length, 0); assert.match(msgs[0], /Project URL/);
+});
+test("new-style sb_ keys go in apikey only, legacy JWT keys in both headers", async () => {
+  const a = mk({ key: "sb_secret_x" }); a.s.add(tr()); await a.s.flush(); assert.equal(a.calls[0].headers.authorization, undefined); assert.equal(a.calls[0].headers.apikey, "sb_secret_x");
+  const b = mk({ key: "eyJabc" }); b.s.add(tr()); await b.s.flush(); assert.equal(b.calls[0].headers.authorization, "Bearer eyJabc");
+});

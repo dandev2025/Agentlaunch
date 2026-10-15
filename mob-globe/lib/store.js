@@ -1,11 +1,14 @@
 // Batched Supabase writer for the relay. Talks to PostgREST with plain fetch (no extra dependency).
 // Never throws into the trade path: a Supabase outage only delays writes (buffers are kept, capped, retried with backoff).
 export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = console.log, bigUsd = 5000 } = {}) {
-  const enabled = !!(url && key), base = enabled ? url.replace(/\/+$/, "") + "/rest/v1/" : "";
+  const okUrl = /^https?:\/\/[^\s/]+/.test(url || "");
+  if (url && !okUrl) log("[db] SUPABASE_URL must be the Project URL like https://abcdefgh.supabase.co (history is OFF). Got something that is not a URL.");
+  const enabled = !!(url && key && okUrl), base = enabled ? url.replace(/\/+$/, "") + "/rest/v1/" : "";
   const buckets = new Map(), bigs = [], dirty = new Map();
   const stat = { flushed: 0, failures: 0, lastError: "" };
   let nextTry = 0, failing = 0, busy = false;
-  const hdr = extra => ({ apikey: key, authorization: "Bearer " + key, "content-type": "application/json", ...extra });
+  // legacy keys are JWTs (eyJ...) and go in both headers; new sb_secret_ keys are not JWTs and go in apikey only
+  const hdr = extra => ({ apikey: key, ...(String(key).startsWith("eyJ") ? { authorization: "Bearer " + key } : {}), "content-type": "application/json", ...extra });
   async function call(path, init) {
     const r = await fetchFn(base + path, { ...init, signal: AbortSignal.timeout?.(10000) });
     if (!r.ok) throw new Error(`${path.split("?")[0]} ${r.status} ${(await r.text().catch(() => "")).slice(0, 160)}`);
