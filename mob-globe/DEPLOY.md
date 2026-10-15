@@ -53,3 +53,7 @@ Keep exactly ONE machine running (`fly scale count 1`): two copies would double-
 Helius meters live websocket data at 2 credits per 0.1 MB (checked on helius.dev/docs, 15 Oct 2026). Free = 1M credits/month, Developer ($49/mo) = 10M.
 The pump.fun-only feed is roughly 100 KB/s, about 5-6M credits a month, so it needs the Developer plan. Turning on `DEX_FEEDS=1` multiplies that by about 8 and will drain even the Developer plan in days.
 When credits run out Helius answers "max usage reached" and the live feed goes silent. Set a usage alert in the Helius dashboard.
+
+## Owner link
+Open `https://YOUR-SITE/?owner` to get the Go live button. The passcode is asked in a box on the page (browsers can block pop-ups, so we do not use them).
+One-tap option for your own phone: open `https://YOUR-SITE/?owner#code=YOUR_PASSCODE` once. The page saves the passcode on that device and removes it from the address bar. Do not share that link or post it anywhere.
