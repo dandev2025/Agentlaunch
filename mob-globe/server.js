@@ -37,7 +37,7 @@ const cmd=(m,k)=>up.readyState===1&&up.send(JSON.stringify({method:m,keys:[k]}))
 async function pLogo(mint){const m=meta.get(mint);if(!m?.uri)return;try{const j=await(await fetch(m.uri,{signal:AbortSignal.timeout(4000)})).json();if(meta.has(mint))m.logo=j.image}catch{}}
 function pump(){up=new WebSocket("wss://pumpportal.fun/api/data");
 up.on("open",()=>{up.send(JSON.stringify({method:"subscribeNewToken"}));subs.forEach(k=>cmd("subscribeTokenTrade",k));watched.forEach(w=>cmd("subscribeAccountTrade",w))});
-up.on("message",raw=>{let d;try{d=JSON.parse(raw)}catch{return}st.pump++;if(!d.mint)return;
+up.on("message",raw=>{let d;try{d=JSON.parse(raw)}catch{return}st.pump++;if(d.txType!=="create"&&(st.samples=(st.samples||0)+1)<=6)console.log("[pump sample, not a new-token msg]",String(raw).slice(0,400));if(!d.mint)return;
 if(d.txType==="create"){meta.set(d.mint,{sym:d.symbol,uri:d.uri});subs.push(d.mint);cmd("subscribeTokenTrade",d.mint);
 if(subs.length>300){const o=subs.shift();cmd("unsubscribeTokenTrade",o);meta.delete(o)}pLogo(d.mint);return}
 if((d.txType!=="buy"&&d.txType!=="sell")||!d.solAmount)return;st.pumpTrades++;touch(d.traderPublicKey);
@@ -57,7 +57,7 @@ async function tokenInfo(mint){if(tokMeta.has(mint))return tokMeta.get(mint);let
 try{const p=(await(await fetch("https://api.dexscreener.com/latest/dex/tokens/"+mint,{signal:AbortSignal.timeout(4000)})).json()).pairs?.[0];if(p)v={sym:p.baseToken.symbol,logo:p.info?.imageUrl}}catch{}
 tokMeta.set(mint,v);if(tokMeta.size>5000)tokMeta.delete(tokMeta.keys().next().value);return v}
 const bal=b=>parseFloat(b.uiTokenAmount.uiAmountString||"0");
-async function decode(sig){if(done.has(sig))return;done.add(sig);if(done.size>5000)done.delete(done.values().next().value);st.tried++;const r=await rpc("getTransaction",[sig,{encoding:"jsonParsed",maxSupportedTransactionVersion:0,commitment:"confirmed"}]);if(r.error){st.rpcErr++;st.err="rpc: "+JSON.stringify(r.error).slice(0,160);return}const t=r.result;
+async function decode(sig){if(done.has(sig))return;done.add(sig);if(done.size>5000)done.delete(done.values().next().value);st.tried++;const r=await rpc("getTransaction",[sig,{encoding:"jsonParsed",maxSupportedTransactionVersion:1,commitment:"confirmed"}]);if(r.error){st.rpcErr++;st.err="rpc: "+JSON.stringify(r.error).slice(0,160);return}const t=r.result;
 if(!t){st.noTx++;return}if(t.meta?.err){st.failedTx++;return}const keys=t.transaction.message.accountKeys.map(k=>k.pubkey||k),signer=keys[0],m=t.meta,d=new Map();
 for(const b of m.postTokenBalances||[])if(b.owner===signer)d.set(b.mint,(d.get(b.mint)||0)+bal(b));
 for(const b of m.preTokenBalances||[])if(b.owner===signer)d.set(b.mint,(d.get(b.mint)||0)-bal(b));
