@@ -19,7 +19,7 @@ keeps a process alive works (Railway, Render, Fly). Free tiers that sleep when i
 | `DECODE_PER_SEC` | `0.4` (free Helius plan) |
 | `LAUNCH_DATE` | your official start, e.g. `2026-10-16T00:00:00Z`. Nothing is counted before it. Leave unset to count from the first saved trade |
 | `DEX_FEEDS` | leave UNSET. Setting it to `1` also listens to Jupiter/Raydium/Orca/Meteora, which streams about 1 MB/s and uses roughly 1.7M Helius credits a day |
-| `ON_DEMAND` | default on: the Helius feed runs only while someone has the page open (stops 60s after the last viewer leaves). Set `0` for always-on. Totals then count only the time the feed was running |
+| `FEED_MODE` | `manual` (default): the Helius feed is OFF until the owner presses Go live (open the site with `?owner`, e.g. https://yoursite/?owner). A session lasts `SESSION_MIN` minutes (default 30) and ends early 60s after the last viewer leaves. `ondemand`: starts when anyone opens the page. `always`: runs 24/7 (needs a paid Helius plan). Totals only count while the feed runs |
 | `PIN_PASSCODE` | a passcode only you know (needed to track wallets on the live site; without it tracking is OFF for everyone) |
 
 `PORT` is set by the host. `ALLOWED_ORIGINS` is only needed if another website embeds the globe (the relay's own page is always allowed).
