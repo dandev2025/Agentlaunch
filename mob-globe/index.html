@@ -215,8 +215,19 @@ function refreshBal(){if(!WAL)return;const a=WAL;fetch("/api/balance/"+a).then(r
 fetch("/api/token/So11111111111111111111111111111111111111112").then(r=>r.ok?r.json():Promise.reject()).then(d=>{if(d.price>0){SOLUSD=d.price;showWal()}}).catch(()=>{});
 if(!FX)fetch("/api/fx").then(r=>r.ok?r.json():Promise.reject()).then(d=>{FX=d.rates;showWal()}).catch(()=>{})}
 function onConn(p){WPROV=p;WAL=p.publicKey&&p.publicKey.toString();WLAM=null;showWal();refreshBal();clearInterval(WTIMER);WTIMER=setInterval(refreshBal,15000)}
-wb.onclick=async()=>{if(WAL){try{await WPROV.disconnect()}catch{}WAL=null;WLAM=null;clearInterval(WTIMER);showWal();return}const p=provider();if(!p){window.open("https://phantom.app/download","_blank","noopener");return}try{await p.connect();onConn(p)}catch{}};
-try{const p0=provider();if(p0)p0.connect({onlyIfTrusted:true}).then(()=>onConn(p0)).catch(()=>{})}catch{}
+const SW=[],regW=w=>{if(w&&w.features&&w.features["standard:connect"]&&!SW.includes(w)&&(w.chains||[]).some(c=>String(c).startsWith("solana:")))SW.push(w)},apiW={register:(...ws)=>{ws.forEach(regW);return()=>{}}};
+window.addEventListener("wallet-standard:register-wallet",e=>{try{e.detail(apiW)}catch{}});try{window.dispatchEvent(new CustomEvent("wallet-standard:app-ready",{detail:apiW}))}catch{}
+function connected(addr,disc){WAL=addr;WPROV={disconnect:disc};WLAM=null;showWal();refreshBal();clearInterval(WTIMER);WTIMER=setInterval(refreshBal,15000)}
+async function connectStd(w){try{const r=await w.features["standard:connect"].connect(),a=(r&&r.accounts&&r.accounts[0])||(w.accounts&&w.accounts[0]);if(a)connected(a.address,async()=>{const d=w.features["standard:disconnect"];if(d)await d.disconnect()})}catch{}}
+async function connectLegacy(p){try{await p.connect();connected(p.publicKey.toString(),()=>p.disconnect())}catch{}}
+function walletPick(){const old=document.getElementById("wch");if(old)old.remove();const o=document.createElement("div");o.id="wch";o.style.cssText="position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:16px";
+const u=encodeURIComponent(location.origin+"/"),btn=(t,f)=>{const b=document.createElement("button");b.className="live";b.type="button";b.style.cssText="width:100%;justify-content:center;padding:12px;margin-top:8px;font-size:13px";b.textContent=t;b.onclick=()=>{o.remove();f()};return b},box=document.createElement("div");box.style.cssText="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;width:min(340px,100%)";
+box.innerHTML='<b style="font-size:16px">Connect wallet</b><div class="note2" style="text-align:left;margin:6px 0 4px">Your wallet asks you to approve every action. Mob Flow never holds your keys.</div>';
+const lg=provider();if(SW.length)SW.forEach(w=>box.appendChild(btn(w.name,()=>connectStd(w))));else if(lg)box.appendChild(btn("Connect "+(lg.isPhantom?"Phantom":"wallet"),()=>connectLegacy(lg)));
+else{box.appendChild(btn("Open in Phantom app",()=>{location.href="https://phantom.app/ul/browse/"+u+"?ref="+u}));box.appendChild(btn("Open in Solflare app",()=>{location.href="https://solflare.com/ul/v1/browse/"+u+"?ref="+u}));box.appendChild(btn("Install Phantom (desktop)",()=>window.open("https://phantom.app/download","_blank","noopener")))}
+const c=btn("Cancel",()=>{});c.style.opacity=".7";box.appendChild(c);o.appendChild(box);o.addEventListener("click",ev=>{if(ev.target===o)o.remove()});document.body.appendChild(o)}
+wb.onclick=async()=>{if(WAL){try{await WPROV.disconnect()}catch{}WAL=null;WLAM=null;clearInterval(WTIMER);showWal();return}walletPick()};
+try{const p0=provider();if(p0)p0.connect({onlyIfTrusted:true}).then(()=>connected(p0.publicKey.toString(),()=>p0.disconnect())).catch(()=>{})}catch{}
 const ov=document.getElementById("ov"),sh=document.getElementById("sh");let selE=null;
 function renderSheet(){const e=selE;if(!e)return;const T=e.v[0]+e.v[1]+e.v[2],N=e.n[0]+e.n[1]+e.n[2],B=(T+N)/2,S="https://solscan.io/";
 const L=document.getElementById("shlive");if(!L)return;L.innerHTML=`<div class="stats"><div class="st"><small>VOLUME</small><b>${money(T)}</b></div><div class="st"><small>BUY SHARE</small><b>${T>1?Math.round(B/T*100):50}%</b></div><div class="st"><small>NET FLOW</small><b class="${N>=0?"b":"s"}">${N>=0?"+":"-"}${money(Math.abs(N))}</b></div></div>
