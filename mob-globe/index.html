@@ -201,9 +201,10 @@ const short=a=>a?a.slice(0,4)+"..."+a.slice(-4):"",money=v=>"$"+Math.round(v).to
 function fakeW(){const c="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";let s="";for(let i=0;i<44;i++)s+=c[Math.random()*c.length|0];return s}
 const buyAmt=()=>{try{return localStorage.getItem("buyamt")||"0.1"}catch{return "0.1"}},setAmt=v=>{try{localStorage.setItem("buyamt",v)}catch{}};
 const b64b=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)),bb64=u=>{let s="";for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)};
+async function ensureStd(){if(STD&&STD.w.features["solana:signTransaction"])return true;for(const w of SW){if(!w.features["solana:signTransaction"])continue;for(const silent of[true,false]){try{const r=await w.features["standard:connect"].connect(silent?{silent:true}:undefined),a=(r&&r.accounts&&r.accounts[0])||(w.accounts&&w.accounts[0]);if(a&&a.address===WAL){STD={w,acc:a};return true}}catch{}}}return false}
 async function doSwap(inM,outM,raw,doneTxt,pre){const st=document.getElementById("bst"),say=t=>{if(st)st.innerHTML=t};
 if(!WAL){say("Connect your wallet first.");walletPick();return}
-if(!STD||!STD.w.features["solana:signTransaction"]){swap(pre,pre==="buy"?outM:inM);return}
+if(!(await ensureStd())){say("Your wallet needs to be reconnected for one-tap swaps. Tap your balance to disconnect, then Connect wallet again.");return}
 try{say("Getting your swap...");const r=await fetch("/api/jup/order?"+new URLSearchParams({inputMint:inM,outputMint:outM,amount:raw,taker:WAL})),o=await r.json();
 if(!r.ok||!o.transaction){say("Can't build this swap: "+esc(o.errorMessage||o.error||"try again"));return}
 say("Confirm in your wallet...");const out=await STD.w.features["solana:signTransaction"].signTransaction({account:STD.acc,transaction:b64b(o.transaction),chain:"solana:mainnet"});
@@ -244,7 +245,7 @@ const lg=provider();if(SW.length)SW.forEach(w=>box.appendChild(btn(w.name,()=>co
 else{box.appendChild(btn("Open in Phantom app",()=>{location.href="https://phantom.app/ul/browse/"+u+"?ref="+u}));box.appendChild(btn("Open in Solflare app",()=>{location.href="https://solflare.com/ul/v1/browse/"+u+"?ref="+u}));box.appendChild(btn("Install Phantom (desktop)",()=>window.open("https://phantom.app/download","_blank","noopener")))}
 const c=btn("Cancel",()=>{});c.style.opacity=".7";box.appendChild(c);o.appendChild(box);o.addEventListener("click",ev=>{if(ev.target===o)o.remove()});document.body.appendChild(o)}
 wb.onclick=async()=>{if(WAL){try{await WPROV.disconnect()}catch{}WAL=null;WLAM=null;clearInterval(WTIMER);showWal();return}walletPick()};
-try{const p0=provider();if(p0)p0.connect({onlyIfTrusted:true}).then(()=>connected(p0.publicKey.toString(),()=>p0.disconnect())).catch(()=>{})}catch{}
+setTimeout(async()=>{if(WAL)return;for(const w of SW){try{const r=await w.features["standard:connect"].connect({silent:true}),a=(r&&r.accounts&&r.accounts[0])||(w.accounts&&w.accounts[0]);if(a){STD={w,acc:a};connected(a.address,async()=>{const d=w.features["standard:disconnect"];if(d)await d.disconnect();STD=null});return}}catch{}}try{const p0=provider();if(p0&&!WAL)p0.connect({onlyIfTrusted:true}).then(()=>connected(p0.publicKey.toString(),()=>p0.disconnect())).catch(()=>{})}catch{}},400);
 const ov=document.getElementById("ov"),sh=document.getElementById("sh");let selE=null;
 function renderSheet(){const e=selE;if(!e)return;const T=e.v[0]+e.v[1]+e.v[2],N=e.n[0]+e.n[1]+e.n[2],B=(T+N)/2,S="https://solscan.io/";
 const L=document.getElementById("shlive");if(!L)return;L.innerHTML=`<div class="stats"><div class="st"><small>VOLUME</small><b>${money(T)}</b></div><div class="st"><small>BUY SHARE</small><b>${T>1?Math.round(B/T*100):50}%</b></div><div class="st"><small>NET FLOW</small><b class="${N>=0?"b":"s"}">${N>=0?"+":"-"}${money(Math.abs(N))}</b></div></div>
