@@ -2,12 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createArena, cleanName } from "../lib/arena.js";
 
-const ok = (o = {}) => ({ id: "abcdefghijkl1", name: "Dan", equity: 12.5, level: 2, wins: 3, ...o });
+const ok = (o = {}) => ({ id: "abcdefghijkl1", name: "Dan", equity: 525, level: 2, wins: 3, ...o });
 
 test("accepts a valid score and ranks by equity", () => {
   const a = createArena();
   assert.ok(a.submit(ok()));
-  assert.ok(a.submit(ok({ id: "zzzzzzzzzzzz2", name: "Ann", equity: 20 })));
+  assert.ok(a.submit(ok({ id: "zzzzzzzzzzzz2", name: "Ann", equity: 1000 })));
   const t = a.top();
   assert.equal(t[0].name, "Ann");
   assert.equal(t[0].gain, 100);
@@ -16,7 +16,7 @@ test("accepts a valid score and ranks by equity", () => {
 });
 test("rejects bad ids and out of range values", () => {
   const a = createArena();
-  for (const bad of [ok({ id: "x" }), ok({ equity: -1 }), ok({ equity: 5000 }), ok({ equity: NaN }), ok({ level: 0 }), ok({ level: 1.5 }), ok({ wins: -2 }), null])
+  for (const bad of [ok({ id: "x" }), ok({ equity: -1 }), ok({ equity: 5e6 }), ok({ equity: NaN }), ok({ level: 0 }), ok({ level: 1.5 }), ok({ wins: -2 }), null])
     assert.equal(a.submit(bad), false);
   assert.equal(a.size(), 0);
 });
@@ -39,5 +39,5 @@ test("player cap", () => {
   const a = createArena({ max: 1 });
   assert.ok(a.submit(ok()));
   assert.equal(a.submit(ok({ id: "zzzzzzzzzzzz2" })), false);
-  assert.ok(a.submit(ok({ equity: 3 })));
+  assert.ok(a.submit(ok({ equity: 300 })));
 });

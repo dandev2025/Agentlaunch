@@ -1,5 +1,5 @@
 // Paper-trading arena leaderboard. Scores come from players' browsers, so this is for fun only and every value is range-checked.
-export const START = 10;
+export const START = 500;
 export const cleanName = s => String(s ?? "").replace(/[^A-Za-z0-9 _.\-]/g, "").trim().slice(0, 16) || "Anon";
 const ID = /^[a-z0-9]{12,40}$/;
 
@@ -8,7 +8,7 @@ export function createArena({ save, now = Date.now, max = 5000 } = {}) {
   function submit(b) {
     if (!b || typeof b.id !== "string" || !ID.test(b.id)) return false;
     const equity = +b.equity, level = +b.level, wins = +b.wins;
-    if (!Number.isFinite(equity) || equity < 0 || equity > 1000) return false;
+    if (!Number.isFinite(equity) || equity < 0 || equity > 1e6) return false;
     if (!Number.isInteger(level) || level < 1 || level > 99) return false;
     if (!Number.isInteger(wins) || wins < 0 || wins > 99999) return false;
     if (!players.has(b.id) && players.size >= max) return false;
