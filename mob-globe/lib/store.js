@@ -54,8 +54,10 @@ export function createStore({ url, key, fetchFn = fetch, now = Date.now, log = c
   // Parse JSON ourselves so a wrong SUPABASE_URL (which returns a web page) gives a readable error
   const parse = async (r, what) => { const t = await r.text(); try { return JSON.parse(t); } catch { throw new Error(`${what}: HTTP ${r.status} and not JSON (wrong SUPABASE_URL? calling host: ${new URL(base).host}): ${t.slice(0, 60).replace(/\s+/g, " ").replace(/</g, "‹").replace(/>/g, "›")}`); } };
   const get = async path => parse(await call(path, { headers: hdr({}) }), path.split("?")[0]);
+  const arenaSave = rows => enabled ? upsert("arena_players", rows, "id") : Promise.resolve();
+  const arenaLoad = async () => enabled ? await get("arena_players?select=id,name,equity,level,wins&order=equity.desc&limit=500") : [];
   return {
-    enabled, add, wallet, flush, stat, pending: () => ({ buckets: buckets.size, bigs: bigs.length, wallets: dirty.size }),
+    enabled, add, wallet, flush, stat, arenaSave, arenaLoad, pending: () => ({ buckets: buckets.size, bigs: bigs.length, wallets: dirty.size }),
     loadTracked: async () => enabled ? (await get("tracked_wallets?select=addr&limit=200")).map(r => r.addr) : [],
     saveTracked: async addr => { if (enabled) await upsert("tracked_wallets", [{ addr }], "addr", true) },
     loadWallets: async (limit = 20000) => enabled ? await get(`wallet_stats?select=wallet,n,hours_mask,ll,bot&order=updated_at.desc&limit=${limit}`) : [],

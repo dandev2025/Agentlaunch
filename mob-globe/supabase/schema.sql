@@ -82,3 +82,15 @@ end $$;
 
 -- Optional scheduling: enable the pg_cron extension (Dashboard > Database > Extensions), then run:
 --   select cron.schedule('mob-rollup', '7 * * * *', $$select rollup_hourly()$$);
+
+
+-- Paper trading arena leaderboard (fun game, no real money). Safe to re-run.
+create table if not exists arena_players (
+  id text primary key,
+  name text not null,
+  equity numeric not null,
+  level int not null default 1,
+  wins int not null default 0,
+  updated_at timestamptz not null default now()
+);
+alter table arena_players enable row level security;
