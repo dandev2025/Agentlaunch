@@ -1,5 +1,5 @@
 // Counts distinct wallets holding a token via Helius DAS getTokenAccounts. Capped pages keep credit use bounded.
-export function createHolders({call,pages=5,ttlMs=90000,maxPerMin=20,now=()=>Date.now()}){
+export function createHolders({call,gmgn,pages=5,ttlMs=90000,maxPerMin=20,now=()=>Date.now()}){
   const cache=new Map(),pending=new Map();let win=[];
   async function count(mint){
     const owners=new Set();let cursor,capped=false;
@@ -21,7 +21,7 @@ export function createHolders({call,pages=5,ttlMs=90000,maxPerMin=20,now=()=>Dat
     win=win.filter(x=>t-x<60000);
     if(win.length>=maxPerMin)return c?c.d:null;
     win.push(t);
-    const pr=count(mint).then(d=>{cache.set(mint,{t:now(),d});if(cache.size>500)cache.delete(cache.keys().next().value);return d}).catch(()=>c?c.d:null).finally(()=>pending.delete(mint));
+    const pr=(gmgn?gmgn(mint).catch(()=>null):Promise.resolve(null)).then(g=>g&&g.n>0?g:count(mint)).then(d=>{cache.set(mint,{t:now(),d});if(cache.size>500)cache.delete(cache.keys().next().value);return d}).catch(()=>c?c.d:null).finally(()=>pending.delete(mint));
     pending.set(mint,pr);return pr;
   }};
 }
