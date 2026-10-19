@@ -169,14 +169,14 @@ q.fillStyle=gg;q.beginPath();q.arc(32,32,30,0,7);q.fill();q.lineWidth=4;q.stroke
 const chipsEl=document.getElementById("chips");const chipsHTML=chipsEl.innerHTML='<button class="chip on" data-t="">All coins</button>'+tok.map(t=>`<button class="chip" data-t="${t}">${EM[t]} ${t}</button>`).join("");
 chipsEl.onclick=e=>{const b=e.target.closest(".chip");if(!b)return;filt=b.dataset.t||null;chipsEl.querySelectorAll(".chip").forEach(n=>n.classList.toggle("on",n===b))};
 const fmtK0=n=>n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?(n/1e3).toFixed(1)+"K":String(Math.round(n));
-function trade(ev){if(ev&&ev.bot){BOT.n++;BOT.v+=ev.usd;updateBot();if(ev.wallet&&PINS.some(p=>p.addr===ev.wallet))pinHit(ev,ev.buy,ev.usd,ev.sym,"Bot (no location)");return}
+function trade(ev){if(window.heatAdd&&ev&&!ev.bot)heatAdd(ev);if(ev&&ev.bot){BOT.n++;BOT.v+=ev.usd;updateBot();if(ev.wallet&&PINS.some(p=>p.addr===ev.wallet))pinHit(ev,ev.buy,ev.usd,ev.sym,"Bot (no location)");return}
 const h=ev?ev.hub:pick(),buy=ev?ev.buy:Math.random()<0.55,usd=ev?ev.usd:Math.round(Math.exp(5+Math.random()*4.5)),t=ev?ev.sym:(filt||tok[Math.random()*tok.length|0]);
 const o=mk(h[1]+(Math.random()-.5)*6,h[2]+(Math.random()-.5)*4);o.buy=buy;o.a=0;o.t=t;o.usd=usd;o.logo=ev&&ev.logo;o.pin=!!(ev&&ev.wallet&&PINS.some(p=>p.addr===ev.wallet));if(o.pin){o.w=ev.wallet;o.r+=8;pinHit(ev,buy,usd,t,h[0])}o.r=5+Math.log(Math.max(usd,1))*1.7;bub.push(o);if(bub.length>70)bub.shift();
 tv+=usd;tc++;buy?tb+=usd:ts+=usd;document.getElementById("tv").textContent="$"+tv.toLocaleString();document.getElementById("tc").textContent=tc.toLocaleString();{const n=document.getElementById("nfv"),d=tb-ts;n.textContent=(d>=0?"+":"-")+"$"+Math.abs(d).toLocaleString();n.className=d>=0?"b":"s";document.getElementById("rb").style.width=(tb/(tb+ts)*100)+"%";document.getElementById("bs").textContent=Math.round(tb/(tb+ts)*100)+"% buys"}
 vol[h[3]][buy?0:1]+=usd;track(t,h[3],buy,usd,ev&&ev.logo,{buy,usd,city:h[0],r:h[3],venue:ev&&ev.venue,wallet:ev?ev.wallet:fakeW(),sig:ev&&ev.sig,n:ev&&ev.n,mint:ev&&ev.mint,ts:Date.now()});feed.unshift({t,buy,usd,city:h[0],v:ev&&ev.venue,logo:ev&&ev.logo,mc:ev&&ev.mc,lq:ev&&ev.lq,age:ev&&ev.age});feed.length=Math.min(feed.length,6);
 for(let i=0;i<3;i++){const[b,s]=vol[i];document.getElementById("v"+i).textContent="$"+Math.round(b+s).toLocaleString();document.getElementById("b"+i).style.width=(b/(b+s)*100)+"%";document.getElementById("bp"+i).textContent=Math.round(b/(b+s)*100)+"%";vol[i]=[b*.97,s*.97]}
 document.getElementById("feed").innerHTML=feed.map((f,i)=>`<div class="it" data-t="${f.t}" ${i?'style="animation:none"':''}>${ico(f.t,f.logo)}<div class="m"><b>${f.t}</b><small>${f.city}${f.v?" · "+f.v:""}${f.mc!=null?" · MC $"+fmtK0(f.mc):""}${f.lq!=null?" · Liq $"+fmtK0(f.lq):""}${f.age!=null?" · "+(f.age<90?f.age+"s":f.age<5400?Math.round(f.age/60)+"m":Math.round(f.age/3600)+"h"):""}</small></div><b>$${f.usd.toLocaleString()}</b><span class="sd ${f.buy?"b":"s"}">${f.buy?"BUY":"SELL"}</span></div>`).join("")}
-const ovEl=document.getElementById("ov");function frame(){if(document.hidden||(ovEl&&ovEl.classList.contains("on"))){requestAnimationFrame(frame);return}try{draw()}catch(e){if(!frame.warned){frame.warned=1;console.error("frame error",e)}requestAnimationFrame(frame)}}
+const ovEl=document.getElementById("ov");function frame(){if(document.hidden||window.HEATON||(ovEl&&ovEl.classList.contains("on"))){requestAnimationFrame(frame);return}try{draw()}catch(e){if(!frame.warned){frame.warned=1;console.error("frame error",e)}requestAnimationFrame(frame)}}
 function draw(){if(!drag){rot+=vr;vr+=((paused?0:0.0022)-vr)*0.04;tilt=Math.max(-1.2,Math.min(1.2,tilt+vt));vt*=0.92}S0=Math.sin(rot);C0=Math.cos(rot);ST=Math.sin(tilt);CT=Math.cos(tilt);x.clearRect(0,0,W,Hh);x.globalCompositeOperation="source-over";
 for(const s of stars){x.globalAlpha=.25+.5*Math.abs(Math.sin(Date.now()/1500+s[3]*9));x.fillStyle="#ffe2cc";x.fillRect(s[0]*W,s[1]*Hh,s[2],s[2])}
 x.globalAlpha=1;let g=x.createRadialGradient(cx,cy,R*.9,cx,cy,R*1.35);g.addColorStop(0,"rgba(255,120,40,.35)");g.addColorStop(1,"rgba(255,120,40,0)");
@@ -565,5 +565,56 @@ o.querySelector("#frst").onclick=()=>{apply({});close()};
 o.querySelector("#fap").onclick=()=>{const g=id=>o.querySelector("#"+id).value,n=id=>{const v=g(id);return v===""?null:+v};apply({mcMin:pn(g("f_mcMin")),mcMax:pn(g("f_mcMax")),lqMin:pn(g("f_lqMin")),lqMax:pn(g("f_lqMax")),ageMax:n("f_ageMax"),ageMin:n("f_ageMin"),minUsd:n("f_minUsd"),side:g("f_side")||null,venues:[...o.querySelectorAll("#f_ven .chip.on")].map(b=>b.dataset.v)});close()}}
 bar();sendFilter();
 })();
-</script><div id="jw"><div id="jwin"><button id="jx" type="button" class="live">✕ Close</button><div id="jbox"></div><div class="note2">Swap runs on Jupiter in your own wallet. Not advice.</div></div></div>
+</script><script>
+(function(){
+const WIN=60000,MIN_N=6,MIN_NET=1500,CAP=25000,COLS=6,ROWS=4,SLOTS=COLS*ROWS;
+const hero=document.querySelector(".hero"),tools=document.querySelector(".tools");if(!hero||!tools)return;
+const cv=document.createElement("canvas");cv.id="hg";cv.style.cssText="position:absolute;inset:0;width:100%;height:100%;display:none;z-index:3;touch-action:manipulation";hero.appendChild(cv);
+const btn=document.createElement("button");btn.className="tb";btn.id="hgb";btn.textContent="Heat grid";tools.insertBefore(btn,tools.firstChild);
+const T=new Map(),EY={};let on=false,raf=0,tiles=[],lastEy=0;
+const SL=new Array(SLOTS).fill(null);
+window.heatAdd=ev=>{if(!ev||!ev.mint||!(ev.usd>0))return;let t=T.get(ev.mint);if(!t){t={m:ev.mint,sym:ev.sym||"?",tr:[],h:0,fl:0,slot:-1,seen:0};T.set(ev.mint,t)}t.sym=ev.sym||t.sym;const n=Date.now();t.tr.push([n,ev.buy?ev.usd:-ev.usd]);t.fl=1;t.seen=n;if(t.tr.length>400)t.tr.splice(0,t.tr.length-300)};
+function stats(t,n){while(t.tr.length&&n-t.tr[0][0]>WIN)t.tr.shift();let net=0,b=0,s=0;for(const x of t.tr){net+=x[1];if(x[1]>0)b+=x[1];else s-=x[1]}return{net,n:t.tr.length,b,s}}
+function assign(n){const live=[];for(const t of T.values()){const st=stats(t,n);t.st=st;if(!st.n&&n-t.seen>WIN*2){if(t.slot>=0)SL[t.slot]=null;T.delete(t.m);continue}live.push(t)}
+for(const t of live)if(t.slot>=0&&!st0(t)&&n-t.seen>WIN*1.5){SL[t.slot]=null;t.slot=-1}
+live.sort((a,b)=>(b.st.b+b.st.s)-(a.st.b+a.st.s));
+for(const t of live){if(t.slot>=0)continue;let f=SL.indexOf(null);if(f<0){let w=-1,wv=1e18;for(let i=0;i<SLOTS;i++){const o=SL[i];if(o){const v=o.st.b+o.st.s;if(v<wv){wv=v;w=i}}}if(w>=0&&wv<t.st.b+t.st.s){SL[w].slot=-1;f=w}}if(f>=0){SL[f]=t;t.slot=f}}
+tiles=SL.map((t,i)=>t?t:null)}
+function st0(t){return t.st&&t.st.n>0}
+function qual(st){return st.n>=MIN_N&&Math.abs(st.net)>=MIN_NET}
+function col(buy,a,l){return buy?`rgba(${46*l|0},${224*l|0},${138*l|0},${a})`:`rgba(${255*l|0},${90*l|0},${110*l|0},${a})`}
+function poly(g,p,f){g.beginPath();g.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)g.lineTo(p[i][0],p[i][1]);g.closePath();g.fillStyle=f;g.fill()}
+let hit=[],lastDraw=0;
+function draw(){raf=requestAnimationFrame(draw);if(!on)return;const nT=performance.now();if(nT-lastDraw<30)return;const dt=Math.min(100,nT-lastDraw);lastDraw=nT;
+const dpr=Math.min(devicePixelRatio||1,2),W=cv.clientWidth,H=cv.clientHeight;if(!W||!H)return;if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+const g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);const n=Date.now();assign(n);
+const span=COLS+ROWS,tw=Math.min(W/(span*0.6),H*2.3/span),th=tw/2,cx=W/2-(COLS-ROWS)*tw/4,cy=H*.56-span*th/4,zmax=th*2.1;
+g.font="600 "+Math.max(9,Math.round(tw*.17))+"px system-ui,sans-serif";g.textAlign="center";hit=[];const LBL=[];
+const P=(gx,gy,z)=>[cx+(gx-gy)*tw/2,cy+(gx+gy)*th/2-z];
+// base plates
+for(let gy=0;gy<ROWS;gy++)for(let gx=0;gx<COLS;gx++){const a=P(gx,gy,0),b=P(gx+1,gy,0),c=P(gx+1,gy+1,0),d=P(gx,gy+1,0);g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.lineTo(c[0],c[1]);g.lineTo(d[0],d[1]);g.closePath();g.fillStyle="rgba(255,243,232,.035)";g.fill();g.strokeStyle="rgba(255,243,232,.07)";g.stroke()}
+// tiles back to front
+const order=[];for(let i=0;i<SLOTS;i++)if(tiles[i])order.push(i);order.sort((a,b)=>{const ga=a%COLS+((a/COLS)|0),gb=b%COLS+((b/COLS)|0);return ga-gb});
+for(const i of order){const t=tiles[i],st=t.st,gx=i%COLS,gy=(i/COLS)|0,q=qual(st);
+const target=q?Math.sign(st.net)*Math.min(1,Math.sqrt(Math.abs(st.net)/CAP)):0;t.h+=(target-t.h)*(1-Math.exp(-dt/450));t.fl=Math.max(0,t.fl-dt/700);
+const buy=t.h>=0?(q?st.net>0:st.b>=st.s):false,hz=t.h*zmax,m=.08,x0=gx+m,x1=gx+1-m,y0=gy+m,y1=gy+1-m;
+const A=P(x0,y0,0),B=P(x1,y0,0),C=P(x1,y1,0),D=P(x0,y1,0);
+if(Math.abs(t.h)<.03){const a=.12+t.fl*.55,cc=t.st.b>=t.st.s;poly(g,[A,B,C,D],col(cc,a,1));}
+else if(t.h>0){const a=P(x0,y0,hz),b=P(x1,y0,hz),c=P(x1,y1,hz),d=P(x0,y1,hz);poly(g,[D,C,c,d],col(true,.95,.55));poly(g,[B,C,c,b],col(true,.95,.38));poly(g,[a,b,c,d],col(true,1,1))}
+else{const dz=-hz*.9,a=P(x0,y0,-dz),b=P(x1,y0,-dz),c=P(x1,y1,-dz),d=P(x0,y1,-dz);poly(g,[A,B,C,D],"rgba(20,4,8,.95)");poly(g,[A,B,b,a],col(false,.9,.4));poly(g,[A,D,d,a],col(false,.9,.3));poly(g,[a,b,c,d],col(false,1,.85))}
+const top=P(gx+.5,gy+.5,Math.max(0,hz)),ey=EY[t.m];hit.push({m:t.m,x:top[0],y:top[1],r:tw*.45});LBL.push([t,top,ey])}
+const fs=Math.max(9,Math.round(tw*.17));for(const [t,top,ey] of LBL){const up=t.h>.03?4:0;g.font="600 "+fs+"px system-ui,sans-serif";g.fillStyle="rgba(255,243,232,.95)";g.fillText(t.sym.length>8?t.sym.slice(0,8):t.sym,top[0],top[1]-th*.5-up);if(ey&&ey.v>0){g.font="600 "+Math.max(8,Math.round(tw*.14))+"px system-ui,sans-serif";g.fillStyle="#ffb020";g.fillText("\u{1F441} "+(ey.v>=1e3?(ey.v/1e3).toFixed(1)+"k":ey.v),top[0],top[1]-th*.5+fs-up+2)}}
+if(!order.length){g.fillStyle="rgba(255,243,232,.6)";g.font="600 13px system-ui,sans-serif";g.fillText(live0()?"Waiting for trades that pass your filters…":"Press Go live to fill the grid",W/2,H*.5)}
+g.font="600 10px system-ui,sans-serif";g.fillStyle="rgba(255,243,232,.45)";g.textAlign="left";g.textAlign="right";g.fillText("60s window · tower = net buying · pit = net selling",W-12,H-12);g.textAlign="center"}
+const live0=()=>typeof FEED!=="undefined"&&FEED&&FEED.running;
+cv.addEventListener("click",e=>{const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=1e9;for(const h of hit){const d=Math.hypot(h.x-x,h.y-y);if(d<h.r&&d<bd){bd=d;best=h}}if(best&&typeof openMint==="function")openMint(best.m)});
+async function eyes(){if(!on)return;try{const r=await fetch("/api/eyes");if(r.ok){const o=await r.json();for(const k in EY)delete EY[k];Object.assign(EY,o)}}catch{}}
+let eyT=0;
+function set(v){on=v;cv.style.display=v?"block":"none";btn.classList.toggle("on",v);btn.textContent=v?"Globe":"Heat grid";window.HEATON=v;for(const q of ["#c",".leg",".note"]){const el=hero.querySelector(q);if(el)el.style.visibility=v?"hidden":""}try{localStorage.setItem("view1",v?"heat":"globe")}catch{}clearInterval(eyT);if(v){eyes();eyT=setInterval(eyes,30000)}}
+btn.addEventListener("click",()=>set(!on));
+raf=requestAnimationFrame(draw);
+try{if(localStorage.getItem("view1")==="heat")set(true)}catch{}
+})();
+</script>
+<div id="jw"><div id="jwin"><button id="jx" type="button" class="live">✕ Close</button><div id="jbox"></div><div class="note2">Swap runs on Jupiter in your own wallet. Not advice.</div></div></div>
 </body></html>
